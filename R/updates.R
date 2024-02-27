@@ -1,39 +1,13 @@
 ## update functions
+
+# ToDo
 ## Debug rFisherBingham
-##### it sometimes tries 1000s of times, at which point the function stops and errors out
-##### maybe 1-2% of the time
-##### currently skipping when it errors
 ## Debug loglambda_theta
-##### errors out
-
-#### EDIT: using separate lambda_beta for each cluster now
 
 
-# ## not currently being used. numerical issues
-# update_JOINTclustMemb <- function(params,const){
-#
-#   for(kk in 1:const$K){
-#
-#     ## compute probabilities for all possible a,b
-#     probs <-sapply(1:const$C,function(b){     ## loop over b (columns; theta clusters)
-#               sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
-#                 # exp(log(params$pimat[a,b]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-(get_Btheta(const$X%*%params$theta[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(a-1)*const$d+(1:const$d)]+params$u))^2))
-#                 exp(log(params$pimat[a,b]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-(get_Btheta(const$X%*%params$theta[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(a-1)*const$d+(1:const$d)]+params$u))^2))
-#               })
-#             })
-#     probs <- probs/sum(probs)  ## standardize them
-#
-#     ## sample 1 of C^2 with correct probabilities
-#     ab <- sample(1:(const$C^2),1,prob=c(probs))
-#     ## check which a and b this corresponds to
-#     Zk <- which(matrix(1:(const$C^2),ncol=const$C)==ab,arr.ind = TRUE) ## which element of CxC matrix
-#     params$Zbeta[kk] <- Zk[1]  ## a=corresponding row
-#     params$Ztheta[kk] <- Zk[2] ## b=corresponding column
-#   }
-#   return(params)
-# }
 
-## not currently being used. numerical issues
+
+##
 update_clustMemb <- function(params,const){
 
   for(kk in 1:const$K){
@@ -350,5 +324,31 @@ update_sigma2 <- function(params,const){
 }
 
 
+
+
+
+# ## not currently being used. numerical issues
+# update_JOINTclustMemb <- function(params,const){
+#
+#   for(kk in 1:const$K){
+#
+#     ## compute probabilities for all possible a,b
+#     probs <-sapply(1:const$C,function(b){     ## loop over b (columns; theta clusters)
+#               sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
+#                 # exp(log(params$pimat[a,b]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-(get_Btheta(const$X%*%params$theta[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(a-1)*const$d+(1:const$d)]+params$u))^2))
+#                 exp(log(params$pimat[a,b]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-(get_Btheta(const$X%*%params$theta[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(a-1)*const$d+(1:const$d)]+params$u))^2))
+#               })
+#             })
+#     probs <- probs/sum(probs)  ## standardize them
+#
+#     ## sample 1 of C^2 with correct probabilities
+#     ab <- sample(1:(const$C^2),1,prob=c(probs))
+#     ## check which a and b this corresponds to
+#     Zk <- which(matrix(1:(const$C^2),ncol=const$C)==ab,arr.ind = TRUE) ## which element of CxC matrix
+#     params$Zbeta[kk] <- Zk[1]  ## a=corresponding row
+#     params$Ztheta[kk] <- Zk[2] ## b=corresponding column
+#   }
+#   return(params)
+# }
 
 
