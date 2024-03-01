@@ -124,7 +124,10 @@ initialize_const <- function(Y, ## response
                              stepsize_loglambda_theta,
                              Vgridsearch,
                              gridsize,
-                             rfbtries){
+                             rfbtries,
+                             wls_steps,
+                             MHwls,
+                             stepsize_theta){
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
                 X=X,
@@ -153,7 +156,10 @@ initialize_const <- function(Y, ## response
                 stepsize_loglambda_theta=stepsize_loglambda_theta,
                 Vgridsearch=Vgridsearch,
                 gridsize=gridsize,
-                rfbtries=rfbtries)
+                rfbtries=rfbtries,
+                wls_steps=wls_steps,
+                MHwls=MHwls,
+                stepsize_theta=stepsize_theta)
 
   ## indices
   const$n <- nrow(X)
@@ -182,7 +188,7 @@ initialize_const <- function(Y, ## response
   ## basis functions
   temptheta <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
   Xtheta <- matrix(sapply(1:const$K,function(kk){X%*%temptheta}))
-  const$SS <- mgcv::smoothCon(s(Xtheta),data=data.frame(Xtheta),absorb.cons = FALSE)[[1]]
+  const$SS <- mgcv::smoothCon(s(Xtheta,bs="bs"),data=data.frame(Xtheta),absorb.cons = FALSE)[[1]]
   const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
   const$SSderiv$deriv <- 1 ## first order derivatives
   Btheta <- const$SS$X
@@ -254,14 +260,23 @@ get_starting_vals <- function(const){
   params$u <- rnorm(n,0,sqrt(params$sigma2_u))
 
   ## update thetastar
-  params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0))) ## 0 for vMF
+  params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
+  params$gammastar <-  params$thetastar
   Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
   params$Btheta <- get_Btheta(Xtheta,const)
   params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
   params$theta <- rep(NA,const$L*const$K)
   params <- assign_thetas(params, const)
-  ## testing
+
+  # testing
   # params$Zbeta <- params$Ztheta <- rep(1,length(params$Zbeta))
+  # params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*runif(const$L,-1,1), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
+  # params$gammastar <-  params$thetastar
+  # Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
+  # params$Btheta <- get_Btheta(Xtheta,const)
+  # params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
+  # params$theta <- rep(NA,const$L*const$K)
+  # params <- assign_thetas(params, const)
   # params$thetastar <- rep(1/sqrt(const$L),length(params$thetastar))
   # params$theta <- rep(1/sqrt(const$L),length(params$theta))
   # Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
@@ -269,17 +284,22 @@ get_starting_vals <- function(const){
   # params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
   # params$theta <- rep(NA,const$L*const$K)
   # params <- assign_thetas(params, const)
-  # # params$lambda_beta <- 0.0001
-  # params$sigma2 <- 1
-  # params$sigma2_u <- 1
+  params$lambda_beta <- 1#0.0001
+  params$sigma2 <- 1#sqrt(0.01)
+  params$sigma2_u <- 0.000000000001
+  params$u <- rnorm(n,0,sqrt(params$sigma2_u))
   ## end testing
 
-
+  # print(params$theta[1:4])
 
   ## betastar
-  params$betastar <- c(t(rmvnorm(const$C,const$mu0,solve(const$invSig0))))
+  # params$betastar <- c(t(rmvnorm(const$C,const$mu0,solve(const$invSig0))))
+  # params$betastar <- c(t(rmvnorm(const$C,const$mu0,MASS::ginv(const$invSig0))))
+  params$betastar <- c(t(rmvnorm(const$C,const$mu0,diag(const$d))))
   params$beta <- rep(NA,const$d*const$K)
   params <- assign_betas(params, const)
+  # params$betastar <- truebetastar
+  # params$beta <- truebeta
 
   # Sig0 <- const$invSig0 ## accounting for the unpenalized columns (not invertible)
   # unpenalized_params <- which(rowSums(Sig0)==0)

@@ -152,9 +152,8 @@ update_betastar <- function(params,const){
       }else{
         lambda_beta <- params$lambda_beta[cc]
       }
-      params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
-                                                             mean=const$mu0 ,
-                                                             sigma=(1/lambda_beta)*solve(const$invSig0) )
+      # params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,mean=const$mu0, sigma=(1/lambda_beta)*solve(const$invSig0) )
+      params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,mean=const$mu0, sigma=(1/lambda_beta)*MASS::ginv(const$invSig0) )
 
     }
 
@@ -168,28 +167,213 @@ update_thetastar <- function(params,const){
 
   for(cc in 1:const$C){
     if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
+      whichk <- which(params$Ztheta==cc) ## which k are in cluster cc
 
-      tryCatch({params$thetastar[(cc-1)*const$L+(1:const$L)] <-
+      XtWkytilde <- t(const$X)%*%c(Reduce('+',## summing over the k vectors
+                                          lapply(whichk, ## only k in cluster cc
+                                                 function(kk){ ## Wk*ytildek
+                                                   ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
+                                                     (const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-params$Btheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+                                                 })))
+      XtWX <- t(const$X)%*%diag(c(## vectorizing then turning into single diagonal matrix at the end
+        Reduce('+',## summing over the k
+               lapply(whichk, ## only k in cluster cc
+                      function(kk){ ## Wk
+                        ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
+                      }))))%*%const$X
+      thetadraw <-tryCatch({
         rFisherBingham(1,
-                       mu = const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Reduce('+',## summing over the k vectors
-                                                                                                                      lapply(which(params$Ztheta==cc), ## only k in cluster cc
-                                                                                                                             function(kk){ ## Wk*ytildek
-                                                                                                                               ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
-                                                                                                                                 (const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-params$Btheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
-                                                                                                                             }))),
-                       Aplus = -(0.5/params$sigma2)*t(const$X)%*%diag(c(## vectorizing then turning into single diagonal matrix at the end
-                         Reduce('+',## summing over the k
-                                lapply(which(params$Ztheta==cc), ## only k in cluster cc
-                                       function(kk){ ## Wk
-                                         ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
-                                       }))))%*%const$X
+                       mu = const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkytilde,
+                       Aplus = -(0.5/params$sigma2)*XtWX
                        -0.5*exp(params$loglambda_theta)*const$PEN,
                        mtop=const$rfbtries)},
-               error=function(err){print(paste0("Skipping thetastar for cluster c=",cc))} )
+        error=function(err){ ## if rFB fails
+          print(paste0("Scaled normal approximation for thetastar in cluster ",cc))
+          approxthetastar <-c(rmvnorm(1,
+                                      mu=params$sigma2*solve(XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkytilde),
+                                      sigma=params$sigma2*solve(XtWX+exp(params$loglambda_theta)*const$PEN)))
+          return(approxthetastar/sqrt(sum(approxthetastar^2)))
+        }
+      )
+
+      params$thetastar[(cc-1)*const$L+(1:const$L)] <- thetadraw
+      for(kk in whichk){
+        params$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+        params$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+      }
 
 
-      params$Btheta[const$k_index%in%const$Ztheta[which(const$Ztheta==cc)],] <- get_Btheta(const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
-      params$DerivBtheta[const$k_index%in%const$Ztheta[which(const$Ztheta==cc)],] <- get_DerivBtheta(const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+
+
+    }else{## if n_c=0, draw from the prior
+      params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)
+    }
+
+  }
+  params <- assign_thetas(params,const)
+  return(params)
+}
+
+## do MH with proposals
+update_thetastar_MH <- function(params,const){
+
+  for(cc in 1:const$C){
+    if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
+
+      prop_params <- params
+
+      if(const$MHwls==TRUE){ ## center proposals around WLS
+        ## First find WLS
+        newthetastar <- params$thetastar
+        newBtheta <- params$Btheta
+        newDerivBtheta <- params$DerivBtheta
+        for(ss in 1:const$wls_steps){
+          oldthetastar <- newthetastar
+          oldBtheta <- newBtheta
+          oldDerivBtheta <- newDerivBtheta
+
+          Wytilde <- c(Reduce('+',## summing over the k vectors
+                              lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                                     function(kk){ ## Wk*ytildek
+                                       ((oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
+                                         (const$X%*%oldthetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-oldBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+                                     })))
+          W <- diag(c(## vectorizing then turning into single diagonal matrix at the end
+            Reduce('+',## summing over the k
+                   lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                          function(kk){ ## Wk
+                            ((oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
+                          }))))
+
+          wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
+
+          newthetastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2)))
+          newBtheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_Btheta(const$X%*%newthetastar[(cc-1)*const$L+(1:const$L)],const)
+          newDerivBtheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_DerivBtheta(const$X%*%newthetastar[(cc-1)*const$L+(1:const$L)],const)
+
+        }
+
+        propmu <- newthetastar[(cc-1)*const$L+(1:const$L)]
+
+      }else{ ## otherwise center proposals around current value
+        propmu <- params$thetastar[(cc-1)*const$L+(1:const$L)]
+      }
+      print("mu")
+      print(propmu)
+      ## proposals from vMF
+      prop_params$thetastar[(cc-1)*const$L+(1:const$L)] <- c(Rfast::rvmf(1,mu=propmu,k=const$stepsize_theta))
+      print("proptheta")
+      print(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])
+      prop_params$Btheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_Btheta(const$X%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+      prop_params$DerivBtheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_DerivBtheta(const$X%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+
+      ## obtain components for posterior
+      Wytilde <- c(Reduce('+',## summing over the k vectors
+                          lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                                 function(kk){ ## Wk*ytildek
+                                   ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
+                                     (const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-params$Btheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+                                 })))
+      W <- diag(c(## vectorizing then turning into single diagonal matrix at the end
+        Reduce('+',## summing over the k
+               lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                      function(kk){ ## Wk
+                        ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
+                      }))))
+      rfb_mu <- const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Wytilde)
+      rfb_A <- -(0.5/params$sigma2)*t(const$X)%*%W%*%const$X -0.5*exp(params$loglambda_theta)*const$PEN
+
+
+      ## compute log-acceptance ratio
+      logPostRatio <- (t(rfb_mu)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]+t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -
+        (t(rfb_mu)%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
+      print("postratio")
+      print(logPostRatio)
+      logPropRatio <- (const$stepsize_theta*propmu%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) - ## vMF
+        (const$stepsize_theta*propmu%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
+      print("propratio")
+      print(logPropRatio)
+      logRatio <- logPostRatio-logPropRatio
+      if(log(runif(1,0,1)) < logRatio){ ## accept
+        params <- prop_params
+      }
+
+
+    }else{## if n_c=0, draw from the prior
+      params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)
+    }
+
+  }
+  params <- assign_thetas(params,const)
+  return(params)
+}
+
+
+
+## do MH with via scaled mvn
+update_thetastar_MHmvn <- function(params,const){
+
+  for(cc in 1:const$C){
+    if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
+
+      prop_params <- params
+
+      ## First find WLS
+      newthetastar <- params$thetastar
+      newBtheta <- params$Btheta
+      newDerivBtheta <- params$DerivBtheta
+      for(ss in 1:const$wls_steps){
+        oldthetastar <- newthetastar
+        oldBtheta <- newBtheta
+        oldDerivBtheta <- newDerivBtheta
+
+        Wytilde <- c(Reduce('+',## summing over the k vectors
+                            lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                                   function(kk){ ## Wk*ytildek
+                                     ((oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
+                                       (const$X%*%oldthetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-oldBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+                                   })))
+        W <- diag(c(## vectorizing then turning into single diagonal matrix at the end
+          Reduce('+',## summing over the k
+                 lapply(which(params$Ztheta==cc), ## only k in cluster cc
+                        function(kk){ ## Wk
+                          ((oldDerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
+                        }))))
+
+        wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
+
+        newthetastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2)))
+        newBtheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_Btheta(const$X%*%newthetastar[(cc-1)*const$L+(1:const$L)],const)
+        newDerivBtheta[const$k_index%in%params$Ztheta[which(params$Ztheta==cc)],] <- get_DerivBtheta(const$X%*%newthetastar[(cc-1)*const$L+(1:const$L)],const)
+
+      }
+
+      ## sample from distribution of WLS
+      XTWXinv <- solve(t(const$X)%*%W%*%const$X)
+      prop_params$gammastar[(cc-1)*const$L+(1:const$L)] <-
+                        c(Rfast::rmvnorm(1,
+                                         mu=wls,
+                                         sigma=XTWXinv/max(XTWXinv))) ## scaling max variance to be exactly 1 to avoid running off to infinity (dont need 1/sigma2 for this since we are scaling)
+
+      ## standardize to obtain thetastar
+      prop_params$thetastar[(cc-1)*const$L+(1:const$L)] <- prop_params$gammastar[(cc-1)*const$L+(1:const$L)]/sqrt(sum(prop_params$gammastar[(cc-1)*const$L+(1:const$L)]^2))
+
+      ## obtain components for posterior
+      rfb_mu <- const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Wytilde)
+      rfb_A <- -(0.5/params$sigma2)*t(const$X)%*%W%*%const$X -0.5*exp(params$loglambda_theta)*const$PEN
+
+      ## compute log-acceptance ratio
+      logPostRatio <- (t(rfb_mu)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]+t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -
+        (t(rfb_mu)%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
+
+      logPropRatio <- Rfast::dmvnorm(prop_params$gammastar[(cc-1)*const$L+(1:const$L)],mu=wls,sigma=XTWXinv/max(XTWXinv) ) -
+        Rfast::dmvnorm(params$gammastar[(cc-1)*const$L+(1:const$L)],mu=wls,sigma=XTWXinv/max(XTWXinv) )
+
+      logRatio <- logPostRatio-logPropRatio
+      if(log(runif(1,0,1)) < logRatio){ ## accept
+        params <- prop_params
+      }
+
 
     }else{## if n_c=0, draw from the prior
       params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)

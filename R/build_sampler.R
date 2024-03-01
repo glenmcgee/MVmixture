@@ -28,13 +28,13 @@ build_sampler <- function(const){
         params <- update_clustMemb(params,const) ## update Zbeta and Ztheta
         params <- update_V(params,const)          ## update V_c^theta and V_c^beta
         params <- update_betastar(params,const)
-        params <- update_thetastar(params,const)
+        params <- update_thetastar(params,const) ## update_thetastar(params,const)
         params <- update_alpha(params,const)      ## update alpha_beta and alpha_theta
         params <- update_logrho(params,const)
         params <- update_lambda_beta(params,const)
-        # params <- update_loglambda_theta(params,const) ## No DLM penaty
-        params <- update_u(params,const)
-        params <- update_sigma2_u(params,const)
+        # params <- update_loglambda_theta(params,const) ## No DLM penalty
+        # params <- update_u(params,const)
+        # params <- update_sigma2_u(params,const)
         params <- update_sigma2(params,const)
 
         return(params)

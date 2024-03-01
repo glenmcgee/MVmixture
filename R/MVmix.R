@@ -5,12 +5,13 @@ library(parallel)
 library(mvtnorm)
 library(simdd)
 library(mgcv)
+library(MASS)
 setwd("~/GitHub/MVmixture/R")
 source("helper_functions.R")
 source("fb.saddle.R")
 source("updates.R")
 source("build_sampler.R")
-
+source("predict_MVmix.R")
 ##
 MVmix <- function(Y, ## n x K matrix of responses
                   X, ## n x L matrix of exposures
@@ -39,8 +40,10 @@ MVmix <- function(Y, ## n x K matrix of responses
                   stepsize_loglambda_theta=1, ## sd for random walk
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=100, ## size of grid. Not used it Vgridsearch==FALSE
-                  rfbtries=1000 ## mtop for rFisherBingham (default 1000)
-                  ){
+                  rfbtries=1000, ## mtop for rFisherBingham (default 1000)
+                  wls_steps=4, ## number of steps in WLS approximation
+                  MHwls=FALSE, ## center theta proposals around WLS
+                  stepsize_theta=1){ ## k parameter for theta proposals
 
   ## set up constants
   const <- initialize_const(Y, ## response
@@ -70,7 +73,10 @@ MVmix <- function(Y, ## n x K matrix of responses
                             stepsize_loglambda_theta,
                             Vgridsearch,
                             gridsize,
-                            rfbtries)
+                            rfbtries,
+                            wls_steps,
+                            MHwls,
+                            stepsize_theta)
 
 
   ## set up MCMC sampler with options
@@ -84,7 +90,7 @@ MVmix <- function(Y, ## n x K matrix of responses
 
 
     ## initialize results storage
-    nkeep <- round((niter-nburn)/nthin)
+    nkeep <- floor((niter-nburn)/nthin)# round
 
     keep_Zbeta <- matrix(0,ncol=const$K,nrow=nkeep)
     keep_Ztheta <- matrix(0,ncol=const$K,nrow=nkeep)
@@ -92,6 +98,7 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_Vtheta <- matrix(0,ncol=const$C,nrow=nkeep)
     keep_betastar <- matrix(0,ncol=const$d*const$C,nrow=nkeep)
     keep_beta <- matrix(0,ncol=const$d*const$K,nrow=nkeep)
+    keep_gammastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
     keep_thetastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
     keep_theta <- matrix(0,ncol=const$L*const$K,nrow=nkeep)
     keep_alpha <- matrix(0,ncol=2,nrow=nkeep)
@@ -119,6 +126,7 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_Vtheta[skeep,] <- params_ss$Vtheta
         keep_betastar[skeep,] <- params_ss$betastar
         keep_beta[skeep,] <- params_ss$beta
+        keep_gammastar[skeep,] <- params_ss$gammastar
         keep_thetastar[skeep,] <- params_ss$thetastar
         keep_theta[skeep,] <- params_ss$theta
         keep_alpha[skeep,] <- params_ss$alpha
@@ -138,6 +146,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                 Vtheta=keep_Vtheta,
                 betastar=keep_betastar,
                 beta=keep_beta,
+                gammastar=keep_gammastar,
                 thetastar=keep_thetastar,
                 theta=keep_theta,
                 alpha=keep_alpha,

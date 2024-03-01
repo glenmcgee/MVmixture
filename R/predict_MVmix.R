@@ -36,9 +36,12 @@ predict_MVmix <- function(obj,
     }else{## otherwise use mean values
       theta <- apply(obj$theta,2,mean)
     }
+    for(kk in 1:obj$const$K){
+      theta[(kk-1)*obj$const$L+(1:obj$const$L)] <- theta[(kk-1)*obj$const$L+(1:obj$const$L)]/sqrt(sum(theta[(kk-1)*obj$const$L+(1:obj$const$L)]^2))
+    }
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over clusters
-      Btheta <- get_Btheta(newX%*%c(obj$theta[(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const)
+      Btheta <- get_Btheta(newX%*%c(theta[(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const)
       sapply(1:RR,function(rr){## loop over samples
         Btheta%*%(obj$beta[rr,(kk-1)*obj$const$d+(1:obj$const$d)])
       })
