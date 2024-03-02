@@ -22,24 +22,6 @@ compute_pi <- function(params,const){
   return(params)
 }
 
-compute_logpi <- function(params,const){
-
-  ## compute marginals under independence
-  ## making it add up to 1... I guess we need not sample this parameter
-  logpi_beta <- log(params$Vbeta)+c(0,cumsum(log(1-params$Vbeta))[-const$C])
-  logpi_theta <- log(params$Vtheta)+c(0,cumsum(log(1-params$Vtheta))[-const$C])
-
-  ## joint probs
-  logpimat <- matrix(logpi_beta,nrow=const$C,ncol=const$C,byrow=FALSE)+matrix(logpi_theta,nrow=const$C,ncol=const$C,byrow=TRUE) ## pi^I (under independence)
-  diag(logpimat) <- log(1+exp(params$logrho))+diag(logpimat) ## multiply diagonal by 1+rho
-
-  ## standardize
-  logpistarmat <- logpimat-log(sum(exp(logpimat)))
-
-  params$logpimat <- logpimat
-  params$logpistarmat <- logpistarmat
-  return(params)
-}
 
 ## get basis functions
 get_Btheta <- function(Xtheta,const){
@@ -80,6 +62,53 @@ get_Vlogdensity <- function(vv,cc,params,
   ## log density
   return((alpha-1)*log(1-vv) + sum(sapply(1:const$K,function(kk){log(params$pistarmat[params$Zbeta[kk],params$Ztheta[kk]])})))
 }
+
+## get W and Wytilde
+get_W <- function(cc,whichk,params,const){
+  Wytilde <- c(Reduce('+',## summing over the k vectors
+                      lapply(whichk, ## only k in cluster cc
+                             function(kk){ ## Wk*ytildek
+                               ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
+                                 (const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-params$Btheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+                             })))
+  W <- diag(c(## vectorizing then turning into single diagonal matrix at the end
+    Reduce('+',## summing over the k
+           lapply(whichk, ## only k in cluster cc
+                  function(kk){ ## Wk
+                    ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
+                  }))))
+  return(list(Wytilde=Wytilde,
+              W=W))
+}
+
+## obtain (standardized) WLS estimate
+get_WLS <- function(cc,whichk,params,const){
+  newparams <- params
+
+  for(ss in 1:const$wls_steps){
+    oldparams <- newparams
+
+    ## get W and Wytilde
+    Wcomps <- get_W(cc,whichk,oldparams,const)
+    Wytilde <- Wcomps$Wytilde
+    W <- Wcomps$W
+
+    wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
+
+    newparams$thetastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2))) ## standardize
+    for(kk in whichk){
+      newparams$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
+      newparams$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
+    }
+
+  }
+
+  return(newparams)
+
+}
+
+
+
 
 assign_betas <- function(params,const){
   for(kk in 1:const$K){
@@ -125,6 +154,7 @@ initialize_const <- function(Y, ## response
                              Vgridsearch,
                              gridsize,
                              rfbtries,
+                             thetaMethod,
                              wls_steps,
                              MHwls,
                              stepsize_theta){
@@ -157,6 +187,7 @@ initialize_const <- function(Y, ## response
                 Vgridsearch=Vgridsearch,
                 gridsize=gridsize,
                 rfbtries=rfbtries,
+                thetaMethod=thetaMethod,
                 wls_steps=wls_steps,
                 MHwls=MHwls,
                 stepsize_theta=stepsize_theta)
@@ -209,10 +240,6 @@ initialize_const <- function(Y, ## response
 ## get starting parameter values
 get_starting_vals <- function(const){
   params <- list()
-
-  ## cluster memberships (completely random)
-  # params$Zbeta <-  sample(const$C,const$K,replace=TRUE)
-  # params$Ztheta <- sample(const$C,const$K,replace=TRUE)
 
   ## other params from prior
   params$alpha <- c(rgamma(1,shape=const$prior_alpha_beta[1],rate=const$prior_alpha_beta[2]),
@@ -268,29 +295,6 @@ get_starting_vals <- function(const){
   params$theta <- rep(NA,const$L*const$K)
   params <- assign_thetas(params, const)
 
-  # testing
-  # params$Zbeta <- params$Ztheta <- rep(1,length(params$Zbeta))
-  # params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*runif(const$L,-1,1), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
-  # params$gammastar <-  params$thetastar
-  # Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
-  # params$Btheta <- get_Btheta(Xtheta,const)
-  # params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
-  # params$theta <- rep(NA,const$L*const$K)
-  # params <- assign_thetas(params, const)
-  # params$thetastar <- rep(1/sqrt(const$L),length(params$thetastar))
-  # params$theta <- rep(1/sqrt(const$L),length(params$theta))
-  # Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
-  # params$Btheta <- get_Btheta(Xtheta,const)
-  # params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
-  # params$theta <- rep(NA,const$L*const$K)
-  # params <- assign_thetas(params, const)
-  params$lambda_beta <- 1#0.0001
-  params$sigma2 <- 1#sqrt(0.01)
-  params$sigma2_u <- 0.000000000001
-  params$u <- rnorm(n,0,sqrt(params$sigma2_u))
-  ## end testing
-
-  # print(params$theta[1:4])
 
   ## betastar
   # params$betastar <- c(t(rmvnorm(const$C,const$mu0,solve(const$invSig0))))
@@ -298,8 +302,6 @@ get_starting_vals <- function(const){
   params$betastar <- c(t(rmvnorm(const$C,const$mu0,diag(const$d))))
   params$beta <- rep(NA,const$d*const$K)
   params <- assign_betas(params, const)
-  # params$betastar <- truebetastar
-  # params$beta <- truebeta
 
   # Sig0 <- const$invSig0 ## accounting for the unpenalized columns (not invertible)
   # unpenalized_params <- which(rowSums(Sig0)==0)

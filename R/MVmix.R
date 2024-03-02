@@ -41,9 +41,10 @@ MVmix <- function(Y, ## n x K matrix of responses
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=100, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
-                  wls_steps=4, ## number of steps in WLS approximation
-                  MHwls=FALSE, ## center theta proposals around WLS
-                  stepsize_theta=1){ ## k parameter for theta proposals
+                  thetaMethod="rfbapprox", ## or "MH_vmf" or "MH_mvn"
+                  wls_steps=4, ## number of steps in WLS approximation   ## only for MH
+                  MHwls=FALSE, ## center theta proposals around WLS      ## only for MH
+                  stepsize_theta=0.05){ ## k parameter for theta proposals  ## only for MH
 
   ## set up constants
   const <- initialize_const(Y, ## response
@@ -74,10 +75,10 @@ MVmix <- function(Y, ## n x K matrix of responses
                             Vgridsearch,
                             gridsize,
                             rfbtries,
+                            thetaMethod,
                             wls_steps,
                             MHwls,
                             stepsize_theta)
-
 
   ## set up MCMC sampler with options
   update_params <- build_sampler(const)
