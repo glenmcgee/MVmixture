@@ -93,7 +93,8 @@ get_WLS <- function(cc,whichk,params,const){
     Wytilde <- Wcomps$Wytilde
     W <- Wcomps$W
 
-    wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
+    # wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
+    wls <- params$sigma2*solve(t(const$X)%*%W%*%const$X+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Wytilde))
 
     newparams$thetastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2))) ## standardize
     for(kk in whichk){

@@ -176,8 +176,8 @@ update_thetastar <- function(params,const){
                        mtop=const$rfbtries)},
         error=function(err){ ## if rFB fails
           print(paste0("Scaled normal approximation for thetastar in cluster ",cc))
-          approxthetastar <-c(rmvnorm(1,
-                                      mu=params$sigma2*solve(XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkytilde),
+          approxthetastar <-c(mvtnorm::rmvnorm(1,
+                                      mean=params$sigma2*solve(XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkytilde),
                                       sigma=params$sigma2*solve(XtWX+exp(params$loglambda_theta)*const$PEN)))
           return(approxthetastar/sqrt(sum(approxthetastar^2)))
         }
@@ -272,14 +272,15 @@ update_thetastar_MH_mvn <- function(params,const){
       Wcomps <- get_W(cc,whichk,newparams,const)
       Wytilde <- Wcomps$Wytilde
       W <- Wcomps$W
+      XTWX <- t(const$X)%*%W%*%const$X
 
       ## sample from distribution of WLS
-      XTWXinv <- solve(t(const$X)%*%W%*%const$X)
-      propmu <- newparams$thetastar[(cc-1)*const$L+(1:const$L)]
-      propsig <- params$sigma2*XTWXinv
+      # XTWXinv <- solve(t(const$X)%*%W%*%const$X)
+      propmu <- newparams$sigma2*solve(XtWX+exp(newparams$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/newparams$sigma2)*t(const$X)%*%Wkytilde)#newparams$thetastar[(cc-1)*const$L+(1:const$L)]
+      propsig <- newparams$sigma2*solve(XtWX+exp(newparams$loglambda_theta)*const$PEN) #params$sigma2*XTWXinv
       prop_params$gammastar[(cc-1)*const$L+(1:const$L)] <-
-        c(Rfast::rmvnorm(1,
-                         mu=propmu,
+        c(mvtnorm::rmvnorm(1,
+                         mean=propmu,
                          sigma=propsig)) ##
 
 

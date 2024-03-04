@@ -26,7 +26,7 @@ pred <- predict_MVmix(test2)
 # pred <- predict_MVmix(test2,fixtheta = TRUE)
 
 par(mfrow=c(1,2))
-par(mar = c(1,1,1,1))
+par(mar = c(1,2,1,0.5))
 plot(f1~x1th)
 points(pred$summary[[1]]$mean~x1th,col="blue")
 plot(f2~x2th)
