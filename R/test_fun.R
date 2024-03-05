@@ -65,16 +65,17 @@ x2th <- X%*%theta2
 f1 <- 3*sin(x1th)
 f2 <- 5*cos(x2th)
 fmat <- matrix(c(rep(f1,K/2),rep(f2,K/2)),ncol=K,nrow=n,byrow=FALSE)
-ranef <- matrix(rnorm(n,0,sqrt(0.25)),ncol=K,nrow=n,byrow=FALSE)
+ranef <- matrix(rnorm(n,0,sqrt(0.5)),ncol=K,nrow=n,byrow=FALSE)
 eps <- matrix(rnorm(n*K,0,sqrt(0.5)),ncol=K)
 Y <- fmat+ranef+eps
 
 
 set.seed(1)
-RR <- 5000
+RR <- 4000
 test2 <- MVmix(Y,X,Z=NULL,niter=RR,nburn=0.5*RR,nthin=2,
                Vgridsearch = TRUE,gridsize=10,
-               maxClusters=5,DLM=FALSE,sharedlambda=TRUE,thetaMethod = "MH_vmf",stepsize_theta = 0.05)
+               maxClusters=5,DLM=FALSE,sharedlambda=TRUE,
+               thetaMethod = "MH_beta",prior_omega_a = 1000)
 
 pred <- predict_MVmix(test2)
 # pred <- predict_MVmix(test2,fixtheta = TRUE)

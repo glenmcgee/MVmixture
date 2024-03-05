@@ -56,6 +56,12 @@ build_sampler <- function(const){
         body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_mvn(params, const))
       }
     }
+  }else if(const$thetaMethod=="MH_beta"){
+    for(ll in 2:(lenfun-1)){
+      if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_beta(params, const))
+      }
+    }
   }
 
 

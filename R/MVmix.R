@@ -32,6 +32,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_lambda_theta=c(1,1),
                   prior_sigma2_u=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
+                  prior_omega_a=200, ## hyperparameter a for the beta(a,b) prior on omegastar
                   sharedlambda=TRUE,
                   DLM=FALSE,
                   lagOrder=2, ## min 1. order for lag penalty (only if DLM=TRUE)
@@ -39,12 +40,13 @@ MVmix <- function(Y, ## n x K matrix of responses
                   stepsize_logrho=1, ## sd for random walk
                   stepsize_loglambda_theta=1, ## sd for random walk
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
-                  gridsize=100, ## size of grid. Not used it Vgridsearch==FALSE
+                  gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
-                  thetaMethod="rfbapprox", ## or "MH_vmf" or "MH_mvn"
+                  thetaMethod="rfbapprox", ## or "MH_vmf" or "MH_mvn" or "MH_beta"
                   wls_steps=4, ## number of steps in WLS approximation   ## only for MH
                   MHwls=FALSE, ## center theta proposals around WLS      ## only for MH
-                  stepsize_theta=0.05){ ## k parameter for theta proposals  ## only for MH
+                  stepsize_theta=0.05,## k parameter for theta proposals  ## only for MH
+                  thetagridsize=20){ ## size of grid for thetaMAP ## only for MH_beta
 
   ## set up constants
   const <- initialize_const(Y, ## response
@@ -66,6 +68,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                             prior_lambda_theta,
                             prior_sigma2_u,
                             prior_sigma2,
+                            prior_omega_a,
                             sharedlambda,
                             DLM,
                             lagOrder,
@@ -78,7 +81,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                             thetaMethod,
                             wls_steps,
                             MHwls,
-                            stepsize_theta)
+                            stepsize_theta,
+                            thetagridsize)
 
   ## set up MCMC sampler with options
   update_params <- build_sampler(const)

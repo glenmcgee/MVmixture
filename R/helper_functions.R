@@ -118,6 +118,24 @@ assign_betas <- function(params,const){
   return(params)
 }
 
+
+## compute thetastar from omegastar
+get_theta <- function(omegastar){
+  sin_w <- c(sin(omegastar),1)
+  cos_w <- c(1,cos(omegastar))
+  return(sin_w*cumprod(cos_w))
+}
+
+## compute omegastar from thetastar
+get_omega <- function(thetastar){
+  omegastar <- c()
+  omegastar <- c(omegastar,asin(thetastar[1]))
+  for(jj in 2:(length(thetastar)-1)){
+    omegastar <- c(omegastar,asin(thetastar[jj]/(prod(cos(omegastar)))))
+  }
+  return(omegastar)
+}
+
 assign_thetas <- function(params,const){
   for(kk in 1:const$K){
     params$theta[(kk-1)*const$L+(1:const$L)] <- params$thetastar[(params$Ztheta[kk]-1)*const$L+(1:const$L)]
@@ -146,6 +164,7 @@ initialize_const <- function(Y, ## response
                              prior_lambda_theta,
                              prior_sigma2_u,
                              prior_sigma2,
+                             prior_omega_a,
                              sharedlambda,
                              DLM,
                              lagOrder,
@@ -158,7 +177,8 @@ initialize_const <- function(Y, ## response
                              thetaMethod,
                              wls_steps,
                              MHwls,
-                             stepsize_theta){
+                             stepsize_theta,
+                             thetagridsize){
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
                 X=X,
@@ -179,6 +199,7 @@ initialize_const <- function(Y, ## response
                 prior_lambda_theta=prior_lambda_theta,
                 prior_sigma2_u=prior_sigma2_u,
                 prior_sigma2=prior_sigma2,
+                prior_omega_a=prior_omega_a,
                 sharedlambda=sharedlambda,
                 DLM=DLM,
                 lagOrder=lagOrder,
@@ -191,7 +212,8 @@ initialize_const <- function(Y, ## response
                 thetaMethod=thetaMethod,
                 wls_steps=wls_steps,
                 MHwls=MHwls,
-                stepsize_theta=stepsize_theta)
+                stepsize_theta=stepsize_theta,
+                thetagridsize=thetagridsize)
 
   ## indices
   const$n <- nrow(X)
@@ -233,6 +255,9 @@ initialize_const <- function(Y, ## response
 
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
+  ## grid for theta
+  const$thetagrid <- (1:(const$thetagridsize-1))/const$thetagridsize ## exclude 0s and 1s
+
 
   return(const)
 }
@@ -287,9 +312,18 @@ get_starting_vals <- function(const){
 
   params$u <- rnorm(n,0,sqrt(params$sigma2_u))
 
-  ## update thetastar
-  params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
-  params$gammastar <-  params$thetastar
+  ## initialize thetastar
+  if(const$thetaMethod=="MH_beta"){ ## use omegastar parameterization
+    params$omegastar <- rbeta((const$L-1)*const$C,1,1)
+    params$thetastar <- sapply(1:const$C,function(cc){
+        return(get_theta(params$omegastar[(cc-1)*(const$L-1)+1:(const$L-1)]))
+      })
+  }else{ ## otherwise just draw from fb
+    params$omegastar <- NULL
+    params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
+  }
+
+  params$gammastar <-  params$thetastar ## only used for MH_mvn
   Xtheta <- matrix(sapply(1:const$K,function(kk){const$X%*%params$thetastar[(params$Zbeta[kk]-1)*const$L+(1:const$L)]}))
   params$Btheta <- get_Btheta(Xtheta,const)
   params$DerivBtheta <- get_DerivBtheta(Xtheta,const)
@@ -313,3 +347,5 @@ get_starting_vals <- function(const){
 
   return(params)
 }
+
+

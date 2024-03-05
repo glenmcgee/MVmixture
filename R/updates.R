@@ -138,7 +138,7 @@ update_betastar <- function(params,const){
       Vmat <- solve(lambda_beta*const$invSig0+(1/params$sigma2)*t(params$Btheta[const$k_index%in%whichk,])%*%params$Btheta[const$k_index%in%whichk,])
 
       params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
-                                                             mean=Vmat%*%t(lambda_beta*t(const$mu0)%*%const$invSig0+(1/params$sigma2)*(t((const$y-rep(params$u,each=const$K))[const$k_index%in%whichk])%*%params$Btheta[const$k_index%in%whichk,])  ),
+                                                             mean=Vmat%*%t(lambda_beta*t(const$mu0)%*%const$invSig0+(1/params$sigma2)*(t((const$y-rep(params$u,const$K))[const$k_index%in%whichk])%*%params$Btheta[const$k_index%in%whichk,])  ),
                                                              sigma=Vmat)
     }else{ ## if n_c=0, draw from the prior
       if(const$sharedlambda==TRUE){
@@ -295,8 +295,8 @@ update_thetastar_MH_mvn <- function(params,const){
       logPostRatio <- (t(rfb_mu)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]+t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -
         (t(rfb_mu)%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%rfb_A%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
 
-      logPropRatio <- Rfast::dmvnorm(prop_params$gammastar[(cc-1)*const$L+(1:const$L)],mu=propmu,sigma=propsig ) -
-        Rfast::dmvnorm(params$gammastar[(cc-1)*const$L+(1:const$L)],mu=propmu,sigma=propsig )
+      logPropRatio <- Rfast::dmvnorm(prop_params$gammastar[(cc-1)*const$L+(1:const$L)],mu=propmu,sigma=propsig ,log=TRUE ) -
+        Rfast::dmvnorm(params$gammastar[(cc-1)*const$L+(1:const$L)],mu=propmu,sigma=propsig ,log=TRUE )
 
       logRatio <- logPostRatio-logPropRatio
       if(log(runif(1,0,1)) < logRatio){ ## accept
@@ -311,6 +311,82 @@ update_thetastar_MH_mvn <- function(params,const){
     }
 
   }
+  params <- assign_thetas(params,const)
+  return(params)
+}
+
+## do MH on reparameterized index with beta proposals
+update_thetastar_MH_beta <- function(params, const){
+
+  for(cc in 1:const$C){
+    if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
+      whichk <- which(params$Ztheta==cc)
+
+
+      for(jj in 1:(const$L-1)){
+        prop_params <- params
+
+        # ## find MAP
+        # newparams <- params
+        # postgrid <- sapply(const$thetagrid,function(omega){
+        #   newparams$omegastar[(cc-1)*(const$L-1)+jj] <- pi*omega
+        #   newparams$thetastar[(cc-1)*const$L+(1:const$L)] <- get_theta(newparams$omegastar[(cc-1)*(const$L-1)+(1:(const$L-1))])
+        #   for(kk in whichk){
+        #     newparams$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
+        #     # newparams$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
+        #   }
+        #   ## for each grid element compute the log posterior
+        #   return(-0.5*(1/newparams$sigma2)*sum((const$y[const$k_index%in%whichk]-(newparams$Btheta[const$k_index%in%whichk,]%*%newparams$betastar[(cc-1)*const$d+(1:const$d)]+rep(newparams$u,const$K)[const$k_index%in%whichk]))^2) +
+        #     const$prior_tau_theta*rep(1,const$L)%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(newparams$loglambda_theta)*c(t(newparams$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)])  )
+        # })
+        # omegaMAP <- const$thetagrid[which(postgrid==max(postgrid))] ## find the mode/MAP
+        #
+        # ## get b_MAP from MAP
+        # b_MAP <- ((1-(omegaMAP/pi))*const$prior_omega_a+2*(omegaMAP/pi)-1)/(omegaMAP/pi)
+
+        ## use previous value as mode
+        b_MAP <- ((1-(prop_params$omegastar[(cc-1)*(const$L-1)+jj]/pi))*const$prior_omega_a+2*(prop_params$omegastar[(cc-1)*(const$L-1)+jj]/pi)-1)/(prop_params$omegastar[(cc-1)*(const$L-1)+jj]/pi)
+
+        ## propose new omega_j from pi*beta distribution
+        prop_params$omegastar[(cc-1)*(const$L-1)+jj] <- pi*rbeta(1,const$prior_omega_a,b_MAP)
+
+        ## compute corresponding thetastar proposal and Btheta
+        prop_params$thetastar[(cc-1)*const$L+(1:const$L)] <- get_theta(prop_params$omegastar[(cc-1)*(const$L-1)+(1:(const$L-1))])
+        for(kk in whichk){
+          prop_params$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+          prop_params$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+        }
+
+        ## calculate acceptance ratio
+        logLikRatio <- -0.5*(1/prop_params$sigma2)*sum((const$y[const$k_index%in%whichk]-(prop_params$Btheta[const$k_index%in%whichk,]%*%prop_params$betastar[(cc-1)*const$d+(1:const$d)]+rep(prop_params$u,const$K)[const$k_index%in%whichk]))^2) -
+          -0.5*(1/params$sigma2)*sum((const$y[const$k_index%in%whichk]-(params$Btheta[const$k_index%in%whichk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]+rep(params$u,const$K)[const$k_index%in%whichk]))^2)
+
+        logPriorRatio <- const$prior_tau_theta*rep(1,const$L)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -
+          const$prior_tau_theta*rep(1,const$L)%*%params$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
+
+        logPropRatio <- dbeta(prop_params$omegastar[(cc-1)*(const$L-1)+jj]/pi,const$prior_omega_a,b_MAP,log=TRUE) -
+          dbeta(params$omegastar[(cc-1)*(const$L-1)+jj]/pi,const$prior_omega_a,b_MAP,log=TRUE) +
+          ## from change of variable
+          log(abs(cos(prop_params$omegastar[(cc-1)*(const$L-1)+jj])^(const$L-jj))) -
+          log(abs(cos(params$omegastar[(cc-1)*(const$L-1)+jj])^(const$L-jj)))
+
+        logRatio <- logLikRatio+logPriorRatio-logPropRatio
+        if(log(runif(1,0,1)) < logRatio){ ## accept
+          params <- prop_params
+        }
+
+      }
+
+    }else{## if n_c=0, draw from the prior
+      params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,
+                                                                     mu = const$prior_tau_theta*rep(1,const$L),
+                                                                     Aplus = -0.5*exp(params$loglambda_theta)*const$PEN)
+      params$omegastar[(cc-1)*(const$L-1)+(1:(const$L-1))] <- get_omega(params$thetastar[(cc-1)*const$L+(1:const$L)])
+
+    }
+
+  }
+
   params <- assign_thetas(params,const)
   return(params)
 }
@@ -433,7 +509,7 @@ update_sigma2 <- function(params,const){
 
   params$sigma2 <- 1/rgamma(1,
                             shape=const$prior_sigma2[1]+0.5*const$n*const$K,
-                            rate=const$prior_sigma2[2]+0.5*(sum((const$y-(B_beta+rep(params$u,each=const$K)))^2)) )
+                            rate=const$prior_sigma2[2]+0.5*(sum((const$y-(B_beta+rep(params$u,const$K)))^2)) )
 
   return(params)
 }
