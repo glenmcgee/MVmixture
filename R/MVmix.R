@@ -14,7 +14,7 @@ source("build_sampler.R")
 source("predict_MVmix.R")
 ##
 MVmix <- function(Y, ## n x K matrix of responses
-                  X, ## n x L matrix of exposures
+                  X, ## p-list of n x L matrix of exposures
                   Z, ## confounders to be adjusted
                   ## MCMC specs
                   niter=10000, ## number of iterations
@@ -42,10 +42,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
-                  thetaMethod="rfbapprox", ## or "MH_vmf" or "MH_mvn" or "MH_beta"
-                  wls_steps=4, ## number of steps in WLS approximation   ## only for MH
-                  MHwls=FALSE, ## center theta proposals around WLS      ## only for MH
-                  stepsize_theta=0.05,## k parameter for theta proposals  ## only for MH
+                  thetaMethod="rfbapprox", ## or "MH_beta"
                   thetagridsize=20){ ## size of grid for thetaMAP ## only for MH_beta
 
   ## set up constants
@@ -79,9 +76,6 @@ MVmix <- function(Y, ## n x K matrix of responses
                             gridsize,
                             rfbtries,
                             thetaMethod,
-                            wls_steps,
-                            MHwls,
-                            stepsize_theta,
                             thetagridsize)
 
   ## set up MCMC sampler with options
@@ -97,15 +91,14 @@ MVmix <- function(Y, ## n x K matrix of responses
     ## initialize results storage
     nkeep <- floor((niter-nburn)/nthin)# round
 
-    keep_Zbeta <- matrix(0,ncol=const$K,nrow=nkeep)
-    keep_Ztheta <- matrix(0,ncol=const$K,nrow=nkeep)
+    keep_Zbeta <- matrix(0,ncol=length(params_ss$Zbeta),nrow=nkeep)
+    keep_Ztheta <- matrix(0,ncol=length(params_ss$Ztheta),nrow=nkeep)
     keep_Vbeta <- matrix(0,ncol=const$C,nrow=nkeep)
     keep_Vtheta <- matrix(0,ncol=const$C,nrow=nkeep)
     keep_betastar <- matrix(0,ncol=const$d*const$C,nrow=nkeep)
-    keep_beta <- matrix(0,ncol=const$d*const$K,nrow=nkeep)
-    keep_gammastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
+    keep_beta <- matrix(0,ncol=length(params_ss$beta),nrow=nkeep)
     keep_thetastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
-    keep_theta <- matrix(0,ncol=const$L*const$K,nrow=nkeep)
+    keep_theta <- matrix(0,ncol=length(params_ss$theta),nrow=nkeep)
     keep_alpha <- matrix(0,ncol=2,nrow=nkeep)
     keep_logrho <- matrix(0,ncol=1,nrow=nkeep)
     keep_lambda_beta <- matrix(0,ncol=const$C,nrow=nkeep)
@@ -113,7 +106,7 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_u <- matrix(0,ncol=const$n,nrow=nkeep)
     keep_sigma2_u <- matrix(0,ncol=1,nrow=nkeep)
     keep_sigma2 <- matrix(0,ncol=1,nrow=nkeep)
-
+    keep_b0 <- matrix(0,ncol=const$K,nrow=nkeep)
 
     ## MCMC
     for(ss in 1:niter){
@@ -125,15 +118,14 @@ MVmix <- function(Y, ## n x K matrix of responses
       if(ss>nburn & ss%%nthin==0){
         skeep <- (ss-nburn)/nthin
 
-        keep_Zbeta[skeep,] <- params_ss$Zbeta
-        keep_Ztheta[skeep,] <- params_ss$Ztheta
+        keep_Zbeta[skeep,] <- c(params_ss$Zbeta)
+        keep_Ztheta[skeep,] <- c(params_ss$Ztheta)
         keep_Vbeta[skeep,] <- params_ss$Vbeta
         keep_Vtheta[skeep,] <- params_ss$Vtheta
         keep_betastar[skeep,] <- params_ss$betastar
-        keep_beta[skeep,] <- params_ss$beta
-        keep_gammastar[skeep,] <- params_ss$gammastar
+        keep_beta[skeep,] <- c(params_ss$beta)
         keep_thetastar[skeep,] <- params_ss$thetastar
-        keep_theta[skeep,] <- params_ss$theta
+        keep_theta[skeep,] <- c(params_ss$theta)
         keep_alpha[skeep,] <- params_ss$alpha
         keep_logrho[skeep,] <- params_ss$logrho
         keep_lambda_beta[skeep,] <- params_ss$lambda_beta
@@ -141,6 +133,7 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_u[skeep,] <- params_ss$u
         keep_sigma2_u[skeep,] <- params_ss$sigma2_u
         keep_sigma2[skeep,] <- params_ss$sigma2
+        keep_b0[skeep,] <- params_ss$b0
 
       }
     }
@@ -151,7 +144,6 @@ MVmix <- function(Y, ## n x K matrix of responses
                 Vtheta=keep_Vtheta,
                 betastar=keep_betastar,
                 beta=keep_beta,
-                gammastar=keep_gammastar,
                 thetastar=keep_thetastar,
                 theta=keep_theta,
                 alpha=keep_alpha,
@@ -161,6 +153,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                 u=keep_u,
                 sigma2_u=keep_sigma2_u,
                 sigma2=keep_sigma2,
+                b0=keep_b0,
                 const=const) )
   }
 

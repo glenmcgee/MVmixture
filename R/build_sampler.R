@@ -18,7 +18,8 @@ build_sampler <- function(const){
     params <- update_loglambda_theta(params,const) ## update DLM penalty
     params <- update_u(params,const)
     params <- update_sigma2_u(params,const)
-    params<-update_sigma2(params,const)
+    params <- update_sigma2(params,const)
+    params <- update_intercept(params,const)
 
     return(params)
   }
