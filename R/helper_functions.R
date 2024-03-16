@@ -5,13 +5,14 @@
 ## function to compute pi
 compute_pi <- function(params,const){
 
-  ## compute marginals under independence
+  ## compute "marginals" under independence
   pi_beta <- params$Vbeta*c(1,cumprod(1-params$Vbeta)[-const$C])
   pi_theta <- params$Vtheta*c(1,cumprod(1-params$Vtheta)[-const$C])
 
   ## joint probs
-  pimat <- (pi_beta)%*%t(pi_theta) ## pi^I (under independence)
-  diag(pimat) <- (1+exp(params$logrho))*diag(pimat) ## multiply diagonal by 1+rho
+  pimat <- (pi_beta)%*%t(pi_theta) + diag(exp(params$logrho)*(pi_beta*pi_theta))
+  # pimat <- (pi_beta)%*%t(pi_theta) ## pi^I (under independence)
+  # diag(pimat) <- (1+exp(params$logrho))*diag(pimat) ## multiply diagonal by 1+rho
 
   ## standardize
   pistarmat <- pimat/sum(pimat)
@@ -40,38 +41,31 @@ get_DerivBtheta <- function(Xtheta,const){
   }
 }
 
-## compute B times the corresponding beta for all obs
-# get_B_beta <- function(params,const){
-#
-#   B_beta <- rep(NA,const$n*const$K)
-#   for(kk in 1:const$K){
-#     B_beta[const$k_index==kk] <- params$Btheta[const$k_index==kk,]%*%params$betastar[(params$Zbeta[kk]-1)*const$d+(1:const$d)]
-#   }
-#   return(B_beta)
-# }
+
+## compute B times the corresponding beta for single cluster
+get_B_beta_k <- function(params,const,kk){
+
+  return(sapply(1:const$p,function(jj){
+    get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+  }))
+
+}
 
 ## compute B times the corresponding beta for all obs (d)
 get_B_beta <- function(params,const){
 
-  B_beta <- sapply(1:const$p,function(jj){
-    c(sapply(1:const$K,function(kk){
-      get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
-    }))
-  })
+  return(Reduce("rbind",lapply(1:const$K,function(kk){
+    get_B_beta_k(params,const,kk)
+  })))
 
-  return(B_beta)
 }
 
-## compute DerivB times the corresponding beta for all obs (d)
-get_DerivB_beta <- function(params,const){
 
-  DerivB_beta <- sapply(1:const$p,function(jj){
-    c(sapply(1:const$K,function(kk){
-      get_DerivBtheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
-    }))
-  })
+## compute DerivB times the corresponding beta for given k,j
+get_DerivB_beta <- function(params,const,kk,jj){
 
-  return(DerivB_beta)
+  return( get_DerivBtheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
+
 }
 
 
@@ -95,24 +89,6 @@ get_Vlogdensity <- function(vv,cc,params,
   return((alpha-1)*log(1-vv) + sum(sapply(1:const$p,function(jj){sapply(1:const$K,function(kk){log(params$pistarmat[params$Zbeta[kk,jj],params$Ztheta[kk,jj]])})})))
 }
 
-# ## get W and Wytilde
-# get_W <- function(cc,whichk,params,const){
-#   Wytilde <- c(Reduce('+',## summing over the k vectors
-#                       lapply(whichk, ## only k in cluster cc
-#                              function(kk){ ## Wk*ytildek
-#                                ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)* ## Wk
-#                                  (const$X%*%params$thetastar[(cc-1)*const$L+(1:const$L)]+((const$y[const$k_index==kk]-params$u)-params$Btheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])/(params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
-#                              })))
-#   W <- diag(c(## vectorizing then turning into single diagonal matrix at the end
-#     Reduce('+',## summing over the k
-#            lapply(whichk, ## only k in cluster cc
-#                   function(kk){ ## Wk
-#                     ((params$DerivBtheta[const$k_index==kk,]%*%params$betastar[(cc-1)*const$d+(1:const$d)])^2)
-#                   }))))
-#   return(list(Wytilde=Wytilde,
-#               W=W))
-# }
-
 
 ## get components for thetastar sampling
 get_XTytilde <- function(cc,whichk,whichkj,params,const){
@@ -120,25 +96,22 @@ get_XTytilde <- function(cc,whichk,whichkj,params,const){
   Xtilde_k <- lapply(whichk,function(kk){
     Reduce("+",
       lapply(whichkj[[kk]],function(jj){
-        c(get_DerivB_beta(params,const)[const$k_index==kk,jj])*const$X[[jj]]
+        c(get_DerivB_beta(params,const,kk,jj))*const$X[[jj]]
         })
       )
     })
 
   ytilde_k <- lapply(whichk,function(kk){
-    const$y[const$k_index==kk]-params$b0[kk]-apply(as.matrix(get_B_beta(params,const)[const$k_index==kk,]),1,sum)-params$u+
+    const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u+
       Reduce("+",
              lapply(whichkj[[kk]],function(jj){
-               (c(get_DerivB_beta(params,const)[const$k_index==kk,jj])*const$X[[jj]])%*%params$thetastar[(cc-1)*const$L+(1:const$L)]
+               (c(get_DerivB_beta(params,const,kk,jj))*const$X[[jj]])%*%params$thetastar[(cc-1)*const$L+(1:const$L)]
              })
        )
   })
 
-  XTX <- Reduce("+",lapply(Xtilde_k,function(XX){t(XX)%*%XX}))
-  XTy <- Reduce("+",lapply(1:length(Xtilde_k),function(kk){t(Xtilde_k[[kk]])%*%ytilde_k[[kk]]}))
-
-  return(list(XTX=XTX,
-              XTy=XTy))
+  return(list(XTX=Reduce("+",lapply(Xtilde_k,function(XX){t(XX)%*%XX})),
+              XTy=Reduce("+",lapply(1:length(Xtilde_k),function(kk){t(Xtilde_k[[kk]])%*%ytilde_k[[kk]]}))))
 }
 
 # ## obtain (standardized) WLS estimate
@@ -195,15 +168,13 @@ get_XTytilde <- function(cc,whichk,whichkj,params,const){
 
 ## compute thetastar from omegastar
 get_theta <- function(omegastar){
-  sin_w <- c(sin(omegastar),1)
-  cos_w <- c(1,cos(omegastar))
-  return(sin_w*cumprod(cos_w))
+  return(c(sin(omegastar),1) * cumprod(c(1,cos(omegastar))))
 }
 
 ## compute omegastar from thetastar
 get_omega <- function(thetastar){
-  omegastar <- c()
-  omegastar <- c(omegastar,asin(thetastar[1]))
+
+  omegastar <- c(asin(thetastar[1]))
   for(jj in 2:(length(thetastar)-1)){
     omegastar <- c(omegastar,asin(thetastar[jj]/(prod(cos(omegastar)))))
   }
@@ -463,6 +434,7 @@ get_starting_vals <- function(const){
 
   # intercept
   params$b0 <- rnorm(const$K)
+
 
   return(params)
 }

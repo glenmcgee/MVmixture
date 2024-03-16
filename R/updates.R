@@ -12,27 +12,29 @@ update_clustMemb <- function(params,const){
 
       ## Zbetakj ##
 
+      ## components that get re-used repeatedly
+      y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$u)
+      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
+
       ## compute probabilities for all possible a
-      probs <- sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
-                  exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) + get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(a-1)*const$d+(1:const$d)]+params$u))^2))
-               })
-      probs <- probs/sum(probs)  ## standardize them
+      probs <- c(sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
+        exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2)*sum((y_B_u-Bth_kj%*%params$betastar[(a-1)*const$d+(1:const$d)])^2))
+      })) ## to be standardized below
 
       ## sample 1 of C with correct probabilities
-      tryCatch({params$Zbeta[kk,jj] <- sample(1:const$C,1,prob=c(probs))},
+      tryCatch({params$Zbeta[kk,jj] <- sample(1:const$C,1,prob=probs/sum(probs))}, ## standardized probs
                error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
 
 
       ## Zthetakj ##
 
       ## compute probabilities for all possible b
-      probs <- sapply(1:const$C, function(b){  ## loop over a (rows; beta clusters)
-        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) + get_Btheta(const$X[[jj]]%*%params$thetastar[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]+params$u))^2))
-      })
-      probs <- probs/sum(probs)  ## standardize them
+      probs <- c(sapply(1:const$C, function(b){  ## loop over a (rows; beta clusters)
+        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$thetastar[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+      }))## to be standardized below
 
       ## sample 1 of C with correct probabilities
-      tryCatch({params$Ztheta[kk,jj] <- sample(1:const$C,1,prob=c(probs))},
+      tryCatch({params$Ztheta[kk,jj] <- sample(1:const$C,1,prob=probs/sum(probs))},
                error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
     }
 
@@ -124,7 +126,7 @@ update_intercept <- function(params,const){
 
   for(kk in 1:const$K){
     params$b0[kk] <- rnorm(1,
-                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta(params,const),1,sum)[const$k_index==kk]-params$u))/(const$n),
+                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u))/(const$n),
                        sd=sqrt(params$sigma2/(const$n)))
   }
 
@@ -134,6 +136,7 @@ update_intercept <- function(params,const){
 
 update_betastar <- function(params,const){
 
+  ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
     Reduce("rbind",lapply(1:const$K,function(kk){
       get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
@@ -205,12 +208,6 @@ update_betastar <- function(params,const){
 
 
 update_thetastar <- function(params,const){
-
-  Btheta <- lapply(1:const$p,function(jj){
-    Reduce("rbind",lapply(1:const$K,function(kk){
-      get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
-    }))
-  })
 
   for(cc in 1:const$C){
     if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
@@ -299,11 +296,11 @@ update_thetastar_MH_beta <- function(params, const){
         }
 
         ## components of likelihood
-        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(as.matrix(get_B_beta(params,const)[const$k_index==kk,]),1,sum)-params$u)^2)}) # Reduce("+",lapply(whichk,function(kk){(const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta(params,const)[const$k_index==kk,],1,sum)-params$u)^2}))
-        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(as.matrix(get_B_beta(prop_params,const)[const$k_index==kk,]),1,sum)-prop_params$u)^2)}) # Reduce("+",lapply(whichk,function(kk){(const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta(prop_params,const)[const$k_index==kk,],1,sum)-prop_params$u)^2}))
+        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$u)^2)})
+        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u)^2)})
 
         ## calculate acceptance ratio
-        logLikRatio <- -0.5*(1/prop_params$sigma2)*sum(prop_y_B_u2) - #-0.5*(1/prop_params$sigma2)*sum((const$y[const$k_index%in%whichk]-(prop_params$Btheta[const$k_index%in%whichk,]%*%prop_params$betastar[(cc-1)*const$d+(1:const$d)]+rep(prop_params$u,const$K)[const$k_index%in%whichk]))^2) -
+        logLikRatio <- -0.5*(1/prop_params$sigma2)*sum(prop_y_B_u2) -
           -0.5*(1/params$sigma2)*sum(y_B_u2)
 
         logPriorRatio <- const$prior_tau_theta*rep(1,const$L)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -

@@ -15,7 +15,7 @@ build_sampler <- function(const){
     params <- update_alpha(params,const)
     params <- update_logrho(params,const)
     params <- update_lambda_beta(params,const)
-    params <- update_loglambda_theta(params,const) ## update DLM penalty
+    # params <- update_loglambda_theta(params,const) ## update DLM penalty
     params <- update_u(params,const)
     params <- update_sigma2_u(params,const)
     params <- update_sigma2(params,const)
