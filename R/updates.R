@@ -14,7 +14,7 @@ update_clustMemb <- function(params,const){
 
       ## components that get re-used repeatedly
       y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$u)
-      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
+      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
 
       ## compute probabilities for all possible a
       probs <- c(sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
@@ -30,7 +30,7 @@ update_clustMemb <- function(params,const){
 
       ## compute probabilities for all possible b
       probs <- c(sapply(1:const$C, function(b){  ## loop over a (rows; beta clusters)
-        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$thetastar[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
       }))## to be standardized below
 
       ## sample 1 of C with correct probabilities
@@ -96,7 +96,6 @@ update_V_MH <- function(params,const){
 
 
     ## update Vtheta ##
-
     prop_params <- params
     ## setting minimum of shape2 param to be 1 for proposals
     s1 <- 1+ntheta[cc]
@@ -139,7 +138,7 @@ update_betastar <- function(params,const){
   ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
     Reduce("rbind",lapply(1:const$K,function(kk){
-      get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
+      get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
     }))
   })
 
@@ -217,37 +216,41 @@ update_thetastar <- function(params,const){
       whichkNotj <- lapply(1:const$K,function(kk){which(!(1:const$p)%in%whichkj[[kk]])  })
 
       ## get components of posterior
-      comps <- get_XTytilde(cc,whichk,whichkj,params,const)
+      comps <- get_XTyhat(cc,whichk,whichkj,params,const)
       XTX <- comps$XTX
       XTy <- comps$XTy
 
       thetadraw <-tryCatch({
-        rFisherBingham(1,
-                       mu = const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XTy,#XtWkytilde,
+        c(rFisherBingham(1,
+                       mu = const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy,#XtWkyhat,
                        Aplus = -(0.5/params$sigma2)*XTX#XtWX
                        -0.5*exp(params$loglambda_theta)*const$PEN,
-                       mtop=const$rfbtries)},
+                       mtop=const$rfbtries))},
         error=function(err){ ## if rFB fails
-          print(paste0("Scaled normal approximation for thetastar in cluster ",cc))
-          approxthetastar <-c(mvtnorm::rmvnorm(1,
-                                               mean=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkytilde),
-                                      sigma=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)))
-          return(approxthetastar/sqrt(sum(approxthetastar^2)))
+          print(paste0("Scaled normal approximation for omegastar in cluster ",cc))
+          approxthetadraw <-c(mvtnorm::rmvnorm(1,
+                                               mean=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
+                                               sigma=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)))
+          return(approxthetadraw/sqrt(sum(approxthetadraw^2)))
         }
       )
-
-      params$thetastar[(cc-1)*const$L+(1:const$L)] <- thetadraw
+      params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
+      ## basis transformation to get back to omega scale
+      params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
       for(kk in whichk){
         for(jj in whichkj[[kk]]){
-          params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
-          params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+          params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const)
+          params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const)
         }
       }
 
     }else{## if n_c=0, draw from the prior
-      params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,
-                                                                     mu = const$prior_tau_theta*rep(1,const$L),
-                                                                     Aplus = -0.5*exp(params$loglambda_theta)*const$PEN)
+      thetadraw <- c(rFisherBingham(1,
+                                  mu = const$prior_tau_theta*rep(1,const$Lq),
+                                  Aplus = -0.5*exp(params$loglambda_theta)*const$PEN))
+      params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
+      ## basis transformation to get back to omega scale
+      params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
     }
 
   }
@@ -267,31 +270,35 @@ update_thetastar_MH_beta <- function(params, const){
       whichkj <- lapply(1:const$K,function(kk){sort(whichZ[whichZ[,1]==kk,2])})
       whichkNotj <- lapply(1:const$K,function(kk){which(!(1:const$p)%in%whichkj[[kk]])  })
 
-      for(jj in 1:(const$L-1)){
+      for(jj in 1:(const$Lq-1)){
         prop_params <- params
 
-        ## omega on beta scale
-        if(jj==1){ ## omega_1 defined on [0,pi/2]
-          omegabeta <- prop_params$omegastar[(cc-1)*(const$L-1)+jj]/(pi/2)
-        }else{ ## omega_j defined on [-pi/2,pi/2]
-          omegabeta <- (prop_params$omegastar[(cc-1)*(const$L-1)+jj]+(pi/2))/pi
+        ## phi on beta scale
+        if(jj==1){ ## phi_1 defined on [0,pi/2]
+          phibeta <- prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(pi/2)
+        }else{ ## phi_j defined on [-pi/2,pi/2]
+          phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+(pi/2))/pi
         }
 
-        ## propose new omega_j from pi*beta distribution (using previous value as mode)
-        b_mode <- ((1-(omegabeta))*const$prior_omega_a+2*(omegabeta)-1)/(omegabeta) ## using previous value as mode
-        prop_omegabeta <- rbeta(1,const$prior_omega_a,b_mode)
-        if(jj==1){ ## omega_1 defined on [0,pi/2]
-          prop_params$omegastar[(cc-1)*(const$L-1)+jj] <- (pi/2)*prop_omegabeta
-        }else{ ## omega_j defined on [-pi/2,pi/2]
-          prop_params$omegastar[(cc-1)*(const$L-1)+jj] <- pi*prop_omegabeta-(pi/2)
+        ## propose new phi_j from pi*beta distribution (using previous value as mode)
+        b_mode <- ((1-(phibeta))*const$prior_phi_a+2*(phibeta)-1)/(phibeta) ## using previous value as mode
+        prop_phibeta <- rbeta(1,const$prior_phi_a,b_mode)
+        if(jj==1){ ## phi_1 defined on [0,pi/2]
+          prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- (pi/2)*prop_phibeta
+        }else{ ## phi_j defined on [-pi/2,pi/2]
+          prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
         }
 
-        ## compute corresponding thetastar proposal and Btheta
-        prop_params$thetastar[(cc-1)*const$L+(1:const$L)] <- get_theta(prop_params$omegastar[(cc-1)*(const$L-1)+(1:(const$L-1))])
+        ## compute corresponding omegastar proposal and Btheta
+        # prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- get_theta(prop_params$phistar[(cc-1)*(const$L-1)+(1:(const$L-1))])
+        ## basis transformation to get back to omega scale
+        thetadraw <- get_theta(prop_params$phistar[(cc-1)*(const$Lq-1)+(1:(const$Lq-1))])
+        prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
+        prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
         for(kk in whichk){
           for(jj in whichkj[[kk]]){
-            prop_params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
-            prop_params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)],const)
+            prop_params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const)
+            prop_params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const)
           }
         }
 
@@ -303,15 +310,15 @@ update_thetastar_MH_beta <- function(params, const){
         logLikRatio <- -0.5*(1/prop_params$sigma2)*sum(prop_y_B_u2) -
           -0.5*(1/params$sigma2)*sum(y_B_u2)
 
-        logPriorRatio <- const$prior_tau_theta*rep(1,const$L)%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)]) -
-          const$prior_tau_theta*rep(1,const$L)%*%params$thetastar[(cc-1)*const$L+(1:const$L)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%params$thetastar[(cc-1)*const$L+(1:const$L)])
+        logPriorRatio <- const$prior_tau_theta*rep(1,const$Lq)%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]) -
+          const$prior_tau_theta*rep(1,const$Lq)%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])
 
         ## compare on beta scales
-        logPropRatio <- dbeta(prop_omegabeta,const$prior_omega_a,b_mode,log=TRUE) -
-          dbeta(omegabeta,const$prior_omega_a,b_mode,log=TRUE) +
+        logPropRatio <- dbeta(prop_phibeta,const$prior_phi_a,b_mode,log=TRUE) -
+          dbeta(phibeta,const$prior_phi_a,b_mode,log=TRUE) +
           ## from change of variable
-          log(abs(cos(prop_omegabeta)^(const$L-jj))) -
-          log(abs(cos(omegabeta)^(const$L-jj)))
+          log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
+          log(abs(cos(phibeta)^(const$Lq-jj)))
 
         logRatio <- logLikRatio+logPriorRatio-logPropRatio
         if(log(runif(1,0,1)) < logRatio){ ## accept
@@ -321,14 +328,16 @@ update_thetastar_MH_beta <- function(params, const){
       }
 
     }else{## if n_c=0, draw from the prior
-      params$thetastar[(cc-1)*const$L+(1:const$L)] <- rFisherBingham(1,
-                                                                     mu = const$prior_tau_theta*rep(1,const$L),
-                                                                     Aplus = -0.5*exp(params$loglambda_theta)*const$PEN)
+      thetadraw <- c(rFisherBingham(1,
+                                  mu = const$prior_tau_theta*rep(1,const$Lq),
+                                  Aplus = -0.5*exp(params$loglambda_theta)*const$PEN))
       ## fix later: change of variable on vMF (or set tau=0)
-      if(params$thetastar[(cc-1)*const$L+1]<0){
-        params$thetastar[(cc-1)*const$L+(1:const$L)] <- -params$thetastar[(cc-1)*const$L+(1:const$L)]
+      if(thetadraw[1]<0){
+        thetadraw <- -thetadraw
       }
-      params$omegastar[(cc-1)*(const$L-1)+(1:(const$L-1))] <- get_omega(params$thetastar[(cc-1)*const$L+(1:const$L)])
+      params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
+      params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
+      params$phistar[(cc-1)*(const$Lq-1)+(1:(const$Lq-1))] <- get_phi(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])
     }
 
   }
@@ -403,11 +412,11 @@ update_loglambda_theta <- function(params,const){
 
   ## compute log-acceptance ratio
   logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$C, ## summing over all clusters cc
-                                                                  function(cc){c(t(prop_params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$L+(1:const$L)])}))
-                        - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$L),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
+                                                                  function(cc){c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
+                        - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
     (-0.5*exp(params$loglambda_theta)*sum(sapply(1:const$C, ## summing over all clusters cc
-                                                      function(cc){c(t(params$thetastar[(cc-1)*const$L+(1:const$L)])%*%const$PEN%*%params$thetastar[(cc-1)*const$L+(1:const$L)])}))
-            - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$L),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
+                                                      function(cc){c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
+            - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
 
   logPriorRatio <- dgamma(exp(prop_params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)-
     dgamma(exp(params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)+

@@ -15,7 +15,7 @@ build_sampler <- function(const){
     params <- update_alpha(params,const)
     params <- update_logrho(params,const)
     params <- update_lambda_beta(params,const)
-    # params <- update_loglambda_theta(params,const) ## update DLM penalty
+    params <- update_loglambda_theta(params,const) ## update DLM penalty
     params <- update_u(params,const)
     params <- update_sigma2_u(params,const)
     params <- update_sigma2(params,const)
@@ -44,20 +44,8 @@ build_sampler <- function(const){
     }
   }
 
-  ## replace rfb/approximation with MH (either with rfb or mvn)
-  if(const$thetaMethod=="MH_vmf"){ ##
-    for(ll in 2:(lenfun-1)){
-      if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
-        body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_vmf(params, const))
-      }
-    }
-  }else if(const$thetaMethod=="MH_mvn"){
-    for(ll in 2:(lenfun-1)){
-      if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
-        body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_mvn(params, const))
-      }
-    }
-  }else if(const$thetaMethod=="MH_beta"){
+  ## replace rfb/approximation with MH
+   if(const$approx==FALSE){
     for(ll in 2:(lenfun-1)){
       if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_beta(params, const))

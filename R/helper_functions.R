@@ -11,8 +11,6 @@ compute_pi <- function(params,const){
 
   ## joint probs
   pimat <- (pi_beta)%*%t(pi_theta) + diag(exp(params$logrho)*(pi_beta*pi_theta))
-  # pimat <- (pi_beta)%*%t(pi_theta) ## pi^I (under independence)
-  # diag(pimat) <- (1+exp(params$logrho))*diag(pimat) ## multiply diagonal by 1+rho
 
   ## standardize
   pistarmat <- pimat/sum(pimat)
@@ -24,20 +22,20 @@ compute_pi <- function(params,const){
 
 
 ## get basis functions
-get_Btheta <- function(Xtheta,const){
-  if(ncol(as.matrix(Xtheta))>1){
-    return(sapply(1:ncol(Xtheta),function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xtheta[,jj]))}))
+get_Btheta <- function(Xomega,const){
+  if(ncol(as.matrix(Xomega))>1){
+    return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xomega[,jj]))}))
   }else{
-    return(mgcv::PredictMat(const$SS,data=data.frame(Xtheta)))
+    return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
   }
 }
 
 ## get derivatives of Basis functions
-get_DerivBtheta <- function(Xtheta,const){
-  if(ncol(as.matrix(Xtheta))>1){
-    return(sapply(1:ncol(Xtheta),function(jj){mgcv::PredictMat(const$SSderiv,data=data.frame(Xtheta[,jj]))}))
+get_DerivBtheta <- function(Xomega,const){
+  if(ncol(as.matrix(Xomega))>1){
+    return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega[,jj]))}))
   }else{
-    return(mgcv::PredictMat(const$SSderiv,data=data.frame(Xtheta)))
+    return(mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
   }
 }
 
@@ -46,7 +44,7 @@ get_DerivBtheta <- function(Xtheta,const){
 get_B_beta_k <- function(params,const,kk){
 
   return(sapply(1:const$p,function(jj){
-    get_Btheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
   }))
 
 }
@@ -64,7 +62,7 @@ get_B_beta <- function(params,const){
 ## compute DerivB times the corresponding beta for given k,j
 get_DerivB_beta <- function(params,const,kk,jj){
 
-  return( get_DerivBtheta(const$X[[jj]]%*%params$thetastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
+  return( get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
 
 }
 
@@ -90,28 +88,28 @@ get_Vlogdensity <- function(vv,cc,params,
 }
 
 
-## get components for thetastar sampling
-get_XTytilde <- function(cc,whichk,whichkj,params,const){
+## get components for omegastar sampling
+get_XTyhat <- function(cc,whichk,whichkj,params,const){
 
-  Xtilde_k <- lapply(whichk,function(kk){
+  Xhat_k <- lapply(whichk,function(kk){
     Reduce("+",
       lapply(whichkj[[kk]],function(jj){
-        c(get_DerivB_beta(params,const,kk,jj))*const$X[[jj]]
+        c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]]
         })
       )
     })
 
-  ytilde_k <- lapply(whichk,function(kk){
+  yhat_k <- lapply(whichk,function(kk){
     const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u+
       Reduce("+",
              lapply(whichkj[[kk]],function(jj){
-               (c(get_DerivB_beta(params,const,kk,jj))*const$X[[jj]])%*%params$thetastar[(cc-1)*const$L+(1:const$L)]
+               (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
              })
        )
   })
 
-  return(list(XTX=Reduce("+",lapply(Xtilde_k,function(XX){t(XX)%*%XX})),
-              XTy=Reduce("+",lapply(1:length(Xtilde_k),function(kk){t(Xtilde_k[[kk]])%*%ytilde_k[[kk]]}))))
+  return(list(XTX=Reduce("+",lapply(Xhat_k,function(XX){t(XX)%*%XX})),
+              XTy=Reduce("+",lapply(1:length(Xhat_k),function(kk){t(Xhat_k[[kk]])%*%yhat_k[[kk]]}))))
 }
 
 # ## obtain (standardized) WLS estimate
@@ -121,18 +119,18 @@ get_XTytilde <- function(cc,whichk,whichkj,params,const){
 #   for(ss in 1:const$wls_steps){
 #     oldparams <- newparams
 #
-#     ## get W and Wytilde
+#     ## get W and Wyhat
 #     Wcomps <- get_W(cc,whichk,oldparams,const)
-#     Wytilde <- Wcomps$Wytilde
+#     Wyhat <- Wcomps$Wyhat
 #     W <- Wcomps$W
 #
-#     # wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wytilde))
-#     wls <- params$sigma2*solve(t(const$X)%*%W%*%const$X+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Wytilde))
+#     # wls <- solve(t(const$X)%*%W%*%const$X,t(const$X)%*%c(Wyhat))
+#     wls <- params$sigma2*solve(t(const$X)%*%W%*%const$X+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*t(const$X)%*%c(Wyhat))
 #
-#     newparams$thetastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2))) ## standardize
+#     newparams$omegastar[(cc-1)*const$L+(1:const$L)] <- c(wls/sqrt(sum(wls^2))) ## standardize
 #     for(kk in whichk){
-#       newparams$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
-#       newparams$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%newparams$thetastar[(cc-1)*const$L+(1:const$L)],const)
+#       newparams$Btheta[const$k_index==kk,] <- get_Btheta(const$X%*%newparams$omegastar[(cc-1)*const$L+(1:const$L)],const)
+#       newparams$DerivBtheta[const$k_index==kk,] <- get_DerivBtheta(const$X%*%newparams$omegastar[(cc-1)*const$L+(1:const$L)],const)
 #     }
 #
 #   }
@@ -153,7 +151,7 @@ get_XTytilde <- function(cc,whichk,whichkj,params,const){
 #
 # assign_thetas <- function(params,const){
 #   for(kk in 1:const$K){
-#     params$theta[(kk-1)*const$L+(1:const$L)] <- params$thetastar[(params$Ztheta[kk]-1)*const$L+(1:const$L)]
+#     params$theta[(kk-1)*const$L+(1:const$L)] <- params$omegastar[(params$Ztheta[kk]-1)*const$L+(1:const$L)]
 #   }
 #   return(params)
 # }
@@ -166,19 +164,19 @@ get_XTytilde <- function(cc,whichk,whichkj,params,const){
 #   return(params)
 # }
 
-## compute thetastar from omegastar
-get_theta <- function(omegastar){
-  return(c(sin(omegastar),1) * cumprod(c(1,cos(omegastar))))
+## compute omegastar from phistar
+get_theta <- function(phistar){
+  return(c(sin(phistar),1) * cumprod(c(1,cos(phistar))))
 }
 
-## compute omegastar from thetastar
-get_omega <- function(thetastar){
+## compute phistar from omegastar
+get_phi <- function(omegastar){
 
-  omegastar <- c(asin(thetastar[1]))
-  for(jj in 2:(length(thetastar)-1)){
-    omegastar <- c(omegastar,asin(thetastar[jj]/(prod(cos(omegastar)))))
+  phistar <- c(asin(omegastar[1]))
+  for(jj in 2:(length(omegastar)-1)){
+    phistar <- c(phistar,asin(omegastar[jj]/(prod(cos(phistar)))))
   }
-  return(omegastar)
+  return(phistar)
 }
 
 
@@ -196,12 +194,12 @@ assign_betas <- function(obj){
   return(betas)
 }
 
-assign_thetas <- function(obj){
+assign_omegas <- function(obj){
 
   thetas <- lapply(1:obj$const$p,function(jj){
     Reduce("cbind",lapply(1:obj$const$K,function(kk){
       Reduce("rbind",lapply(1:nrow(obj$Ztheta),function(rr){
-        return(obj$thetastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)])
+        return(obj$omegastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)])
       }))
     }))
   })
@@ -244,18 +242,18 @@ initialize_const <- function(Y, ## response
                              prior_lambda_theta,
                              prior_sigma2_u,
                              prior_sigma2,
-                             prior_omega_a,
+                             prior_phi_a,
                              sharedlambda,
                              DLM,
                              lagOrder,
+                             diff,
                              ## MH tuning
                              stepsize_logrho,
                              stepsize_loglambda_theta,
                              Vgridsearch,
                              gridsize,
                              rfbtries,
-                             thetaMethod,
-                             thetagridsize){
+                             approx){
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
                 X=X,
@@ -276,18 +274,18 @@ initialize_const <- function(Y, ## response
                 prior_lambda_theta=prior_lambda_theta,
                 prior_sigma2_u=prior_sigma2_u,
                 prior_sigma2=prior_sigma2,
-                prior_omega_a=prior_omega_a,
+                prior_phi_a=prior_phi_a,
                 sharedlambda=sharedlambda,
                 DLM=DLM,
                 lagOrder=lagOrder,
+                diff=diff,
                 ## MH tuning
                 stepsize_logrho=stepsize_logrho,
                 stepsize_loglambda_theta=stepsize_loglambda_theta,
                 Vgridsearch=Vgridsearch,
                 gridsize=gridsize,
                 rfbtries=rfbtries,
-                thetaMethod=thetaMethod,
-                thetagridsize=thetagridsize)
+                approx=approx)
 
   ## indices
   if(is.list(X)==FALSE){
@@ -307,47 +305,68 @@ initialize_const <- function(Y, ## response
 
   ##
   if(DLM==TRUE){ ## create penalty matrix
-    D <- diag(const$L)
-    for(jj in 1:(lagOrder)){
-      D <- diff(D)
+
+    # # ###########################################
+    # # ## B splines (with difference penalty like gasparrini)
+    # # ## Works well on uncorrelated X
+    # # ###########################################
+    # QQ <- dlnm::ps(1:const$L,diff=4)
+    # B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
+    # qrB <- qr(B1)
+    # Q <- qr.Q(qrB)
+    # R <- qr.R(qrB)
+    # const$Psi <- Q
+    # const$Lq <- ncol(const$Psi)
+    # const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    # const$PEN <- ginv(R%*%ginv(attr(QQ,"S"))%*%t(R))
+
+    ##########################################
+    # Working smoothed covariance (Ander's version)
+    ##########################################
+    smoothX <- Reduce("rbind",lapply(const$X,function(X){t(apply(X,1,function(x){predict(gam(x~s(seq(1:ncol(X)))))}))}))
+    eigcorX <- eigen(cor(smoothX))
+    if(!is.null(const$lagOrder)){
+      nbases <-   const$lagOrder
+    }else{
+      nbases <- min(which(cumsum(eigcorX$values)/sum(eigcorX$values)>0.99))
     }
-    const$PEN <- t(D)%*%D
+    const$Psi <- eigcorX$vectors[,1:nbases]
+    # ## testing: manually adding intercept
+    # int_vec <- (diag(const$L)-const$Psi%*%solve(t(const$Psi)%*%const$Psi,t(const$Psi)))%*%rep(1,const$L)
+    # int_vec <- int_vec/sqrt(sum(int_vec^2))
+    # const$Psi <- as.matrix(cbind(int_vec,const$Psi))
+    # ## end testing
+    const$XPsi <-  lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    const$Lq <- ncol(const$Psi)
+    ## getting appropriate penalty
+    D <- diag(const$L)
+    for(jj in 1:const$diff){D <- diff(D)} ## using d=4. make variable
+    diffpen <- t(D)%*%D
+    const$PEN <- ginv(t(const$Psi)%*%ginv(diffpen)%*%const$Psi)
+
   }else{ ## no penalties
     const$PEN <- matrix(0,ncol=const$L,nrow=const$L)
+    const$Lq <- const$L ##
+    const$Psi <- diag( const$L) ## basis matrix
+    const$XPsi <- const$X #
   }
 
 
   ## basis functions
   ### Uses same basis functions for all exposures.
-  temptheta <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
+  tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
   ## combining all exposures to get basis functions
-  Xtheta <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%temptheta}))
-  const$SS <- mgcv::smoothCon(s(Xtheta,bs="bs"),data=data.frame(Xtheta),absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
+  Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
+  const$SS <- mgcv::smoothCon(s(Xomega,bs="bs"),data=data.frame(Xomega),
+                              absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
   const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
   const$SSderiv$deriv <- 1 ## first order derivatives
   const$d <- ncol(const$SS$X)
-  ## now a list of n x d matrices B
-  Btheta <- lapply(1:const$p,function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xtheta=const$X[[jj]]%*%temptheta))})
   const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
   const$invSig0 <- const$SS$S[[1]]
-  # Xtheta <- matrix(sapply(1:const$K,function(kk){X%*%temptheta}))
-  # const$SS <- mgcv::smoothCon(s(Xtheta,bs="bs"),data=data.frame(Xtheta),absorb.cons = FALSE)[[1]]
-  # const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
-  # const$SSderiv$deriv <- 1 ## first order derivatives
-  # Btheta <- const$SS$X
-  # const$d <- ncol(Btheta)
-  # const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
-  # const$invSig0 <- const$SS$S[[1]]
-
- ## accounting for the unpenalized columns (not invertible)
-  # unpenalized_params <- which(rowSums(const$invSig0)==0)
-  # diag(const$invSig0)[unpenalized_params] <- 1 ## currently using N(0,1) prior on unpenalized components
 
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
-  ## grid for theta
-  const$thetagrid <- (1:(const$thetagridsize-1))/const$thetagridsize ## exclude 0s and 1s
-
 
   return(const)
 }
@@ -372,7 +391,6 @@ get_starting_vals <- function(const){
   params$Zbeta <- params$Ztheta <- matrix(NA,nrow=const$K,ncol=const$p)
   for(kk in 1:const$K){
     for(jj in 1:const$p){
-
         ## sample 1 of C^2 with correct probabilities
         ab <- sample(1:(const$C^2),1,prob=c(params$pistarmat))
         ## check which a and b this corresponds to
@@ -381,10 +399,6 @@ get_starting_vals <- function(const){
         params$Ztheta[kk,jj] <- Zk[2] ## b=corresponding column
     }
   }
-
-  # # ## TESTING
-  # params$Zbeta <- matrix(c(rep(c(1,1),each=2),rep(c(3,3),each=2)),ncol=2)
-  # params$Ztheta <- matrix(c(rep(c(1,2),each=2),rep(c(3,4),each=2)),ncol=2)
 
 
   if(const$sharedlambda==TRUE){
@@ -406,31 +420,38 @@ get_starting_vals <- function(const){
   # params$sigma2_u <- 1/rgamma(1,shape=const$prior_sigma2_u[1],rate=const$prior_sigma2_u[2])
   params$sigma2_u <- 1/rgamma(1,shape=10,rate=10)
 
+  ## testing
+  params$sigma2 <- 0.05
+  params$sigma2_u <- 0.00001
+
   params$u <- rnorm(n,0,sqrt(params$sigma2_u))
 
-  ## initialize thetastar
-  if(const$thetaMethod=="MH_beta"){ ## use omegastar parameterization
-    params$omegastar <- rbeta((const$L-1)*const$C,1,1)
+  ## initialize omegastar
+  if(const$approx==FALSE){ ## use polar coordinate parameterization
+    params$phistar <- rbeta((const$Lq-1)*const$C,1,1)
     params$thetastar <- sapply(1:const$C,function(cc){
-        return(get_theta(params$omegastar[(cc-1)*(const$L-1)+1:(const$L-1)]))
-      })
+      return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
+    })
   }else{ ## otherwise just draw from fb
-    params$omegastar <- NULL
-    params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$L), Aplus = 0)))##rep(rep(1,const$L)/sqrt(const$L),const$C)# ## 0 for vMF
+    params$phistar <- NULL
+    params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
   }
+  ## convert thetastar to omegastar if necessary (Psi is just Identity if not a DLM, then omegastar=thetastar)
+  params$omegastar <- sapply(1:const$C,function(cc){
+    return(c(const$Psi%*%params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
+  })
 
+  # ## testing ##
+  # params$thetastar <- params$omegastar <- rep(theta1,const$C)
+  # params$Ztheta <- params$Zbeta <- matrix(1,ncol=ncol(params$Ztheta),nrow=nrow(params$Ztheta))
 
-  ## Get Xtheta and basis functions
-  Xtheta <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$thetastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
-  params$Btheta <- lapply(1:const$p,function(jj){get_Btheta(Xtheta[,jj],const)})
-  params$DerivBtheta <- lapply(1:const$p,function(jj){get_DerivBtheta(Xtheta[,jj],const)})
-  params$theta <- matrix(NA,ncol=const$L*const$p,nrow=const$K)
-  # params <- assign_thetas(params, const)
+  ## Get Xomega and basis functions
+  Xomega <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$omegastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
+  params$Btheta <- lapply(1:const$p,function(jj){get_Btheta(Xomega[,jj],const)})
+  params$DerivBtheta <- lapply(1:const$p,function(jj){get_DerivBtheta(Xomega[,jj],const)})
 
   ## betastar
   params$betastar <- c(t(rmvnorm(const$C,const$mu0,diag(const$d))))
-  params$beta <- matrix(NA,ncol=const$d*const$p,nrow=const$K)
-  # params <- assign_betas(params, const)
 
   # intercept
   params$b0 <- rnorm(const$K)

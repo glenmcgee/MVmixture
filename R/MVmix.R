@@ -32,18 +32,18 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_lambda_theta=c(1,1),
                   prior_sigma2_u=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
-                  prior_omega_a=200, ## hyperparameter a for the beta(a,b) prior on omegastar
+                  prior_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
                   sharedlambda=TRUE,
                   DLM=FALSE,
-                  lagOrder=2, ## min 1. order for lag penalty (only if DLM=TRUE)
+                  lagOrder=4, ## no. of bases for omega weight function (if DLM=TRUE)
+                  diff=2, ## degree of difference penalty matrix (if DLM=TRUE)
                   ## MH tuning
                   stepsize_logrho=1, ## sd for random walk
                   stepsize_loglambda_theta=1, ## sd for random walk
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
-                  thetaMethod="rfbapprox", ## or "MH_beta"
-                  thetagridsize=20){ ## size of grid for thetaMAP ## only for MH_beta
+                  approx=TRUE){ ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
 
   ## set up constants
   const <- initialize_const(Y, ## response
@@ -65,18 +65,18 @@ MVmix <- function(Y, ## n x K matrix of responses
                             prior_lambda_theta,
                             prior_sigma2_u,
                             prior_sigma2,
-                            prior_omega_a,
+                            prior_phi_a,
                             sharedlambda,
                             DLM,
                             lagOrder,
+                            diff,
                             ## MH tuning
                             stepsize_logrho,
                             stepsize_loglambda_theta,
                             Vgridsearch,
                             gridsize,
                             rfbtries,
-                            thetaMethod,
-                            thetagridsize)
+                            approx)
 
   ## set up MCMC sampler with options
   update_params <- build_sampler(const)
@@ -96,9 +96,8 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_Vbeta <- matrix(0,ncol=const$C,nrow=nkeep)
     keep_Vtheta <- matrix(0,ncol=const$C,nrow=nkeep)
     keep_betastar <- matrix(0,ncol=const$d*const$C,nrow=nkeep)
-    keep_beta <- matrix(0,ncol=length(params_ss$beta),nrow=nkeep)
-    keep_thetastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
-    keep_theta <- matrix(0,ncol=length(params_ss$theta),nrow=nkeep)
+    keep_thetastar <- matrix(0,ncol=const$Lq*const$C,nrow=nkeep)
+    keep_omegastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
     keep_alpha <- matrix(0,ncol=2,nrow=nkeep)
     keep_logrho <- matrix(0,ncol=1,nrow=nkeep)
     keep_lambda_beta <- matrix(0,ncol=const$C,nrow=nkeep)
@@ -123,9 +122,8 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_Vbeta[skeep,] <- params_ss$Vbeta
         keep_Vtheta[skeep,] <- params_ss$Vtheta
         keep_betastar[skeep,] <- params_ss$betastar
-        keep_beta[skeep,] <- c(params_ss$beta)
         keep_thetastar[skeep,] <- params_ss$thetastar
-        keep_theta[skeep,] <- c(params_ss$theta)
+        keep_omegastar[skeep,] <- params_ss$omegastar
         keep_alpha[skeep,] <- params_ss$alpha
         keep_logrho[skeep,] <- params_ss$logrho
         keep_lambda_beta[skeep,] <- params_ss$lambda_beta
@@ -143,9 +141,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                 Vbeta=keep_Vbeta,
                 Vtheta=keep_Vtheta,
                 betastar=keep_betastar,
-                beta=keep_beta,
                 thetastar=keep_thetastar,
-                theta=keep_theta,
+                omegastar=keep_omegastar,
                 alpha=keep_alpha,
                 logrho=keep_logrho,
                 lambda_beta=keep_lambda_beta,
