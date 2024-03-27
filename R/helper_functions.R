@@ -173,8 +173,10 @@ get_theta <- function(phistar){
 get_phi <- function(omegastar){
 
   phistar <- c(asin(omegastar[1]))
-  for(jj in 2:(length(omegastar)-1)){
-    phistar <- c(phistar,asin(omegastar[jj]/(prod(cos(phistar)))))
+  if(length(omegastar)>2){
+    for(jj in 2:(length(omegastar)-1)){
+      phistar <- c(phistar,asin(omegastar[jj]/(prod(cos(phistar)))))
+    }
   }
   return(phistar)
 }
