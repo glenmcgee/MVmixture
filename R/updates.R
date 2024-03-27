@@ -317,8 +317,8 @@ update_thetastar_MH_beta <- function(params, const){
         logPropRatio <- dbeta(prop_phibeta,const$prior_phi_a,b_mode,log=TRUE) -
           dbeta(phibeta,const$prior_phi_a,b_mode,log=TRUE) +
           ## from change of variable
-          log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
-          log(abs(cos(phibeta)^(const$Lq-jj)))
+          log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
+          log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj)))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
 
         logRatio <- logLikRatio+logPriorRatio-logPropRatio
         if(log(runif(1,0,1)) < logRatio){ ## accept
