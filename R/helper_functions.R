@@ -247,6 +247,7 @@ initialize_const <- function(Y, ## response
                              prior_phi_a,
                              sharedlambda,
                              DLM,
+                             DLMpenalty,
                              lagOrder,
                              diff,
                              ## MH tuning
@@ -279,6 +280,7 @@ initialize_const <- function(Y, ## response
                 prior_phi_a=prior_phi_a,
                 sharedlambda=sharedlambda,
                 DLM=DLM,
+                DLMpenalty=DLMpenalty,
                 lagOrder=lagOrder,
                 diff=diff,
                 ## MH tuning
@@ -308,43 +310,59 @@ initialize_const <- function(Y, ## response
   ##
   if(DLM==TRUE){ ## create penalty matrix
 
-    # # ###########################################
-    # # ## B splines (with difference penalty like gasparrini)
-    # # ## Works well on uncorrelated X
-    # # ###########################################
-    # QQ <- dlnm::ps(1:const$L,diff=4)
-    # B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
-    # qrB <- qr(B1)
-    # Q <- qr.Q(qrB)
-    # R <- qr.R(qrB)
-    # const$Psi <- Q
-    # const$Lq <- ncol(const$Psi)
-    # const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
-    # const$PEN <- ginv(R%*%ginv(attr(QQ,"S"))%*%t(R))
-
-    ##########################################
-    # Working smoothed covariance (Ander's version)
-    ##########################################
-    smoothX <- Reduce("rbind",lapply(const$X,function(X){t(apply(X,1,function(x){predict(gam(x~s(seq(1:ncol(X)))))}))}))
-    eigcorX <- eigen(cor(smoothX))
-    if(!is.null(const$lagOrder)){
-      nbases <-   const$lagOrder
-    }else{
-      nbases <- min(which(cumsum(eigcorX$values)/sum(eigcorX$values)>0.99))
-    }
-    const$Psi <- eigcorX$vectors[,1:nbases]
-    # ## testing: manually adding intercept
-    # int_vec <- (diag(const$L)-const$Psi%*%solve(t(const$Psi)%*%const$Psi,t(const$Psi)))%*%rep(1,const$L)
-    # int_vec <- int_vec/sqrt(sum(int_vec^2))
-    # const$Psi <- as.matrix(cbind(int_vec,const$Psi))
-    # ## end testing
-    const$XPsi <-  lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    # ###########################################
+    # ## B splines (with difference penalty like gasparrini)
+    # ## Works well on uncorrelated X
+    # ###########################################
+    QQ <- dlnm::ps(1:const$L,diff=const$diff)
+    B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
+    qrB <- qr(B1)
+    Q <- qr.Q(qrB)
+    R <- qr.R(qrB)
+    const$Psi <- Q
     const$Lq <- ncol(const$Psi)
-    ## getting appropriate penalty
-    D <- diag(const$L)
-    for(jj in 1:const$diff){D <- diff(D)} ## using d=4. make variable
-    diffpen <- t(D)%*%D
-    const$PEN <- ginv(t(const$Psi)%*%ginv(diffpen)%*%const$Psi)
+    const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    const$PEN <- ginv(R%*%ginv(attr(QQ,"S"))%*%t(R))
+    if(const$DLMpenalty==FALSE){
+      const$PEN <- 0*const$PEN
+    }
+
+    # ##########################################
+    # # Working smoothed covariance (Ander's version)
+    # ##########################################
+    # smoothX <- Reduce("rbind",lapply(const$X,function(X){t(apply(X,1,function(x){predict(gam(x~s(seq(1:ncol(X)),k=8)))}))}))
+    # eigcorX <- eigen(cor(smoothX))
+    # if(!is.null(const$lagOrder)){
+    #   nbases <-   9#const$lagOrder
+    # }else{
+    #   nbases <- min(which(cumsum(eigcorX$values)/sum(eigcorX$values)>0.99))
+    # }
+    # const$Psi <- eigcorX$vectors[,1:nbases]
+    # # ## testing: manually adding intercept
+    # # int_vec <- (diag(const$L)-const$Psi%*%solve(t(const$Psi)%*%const$Psi,t(const$Psi)))%*%rep(1,const$L)
+    # # int_vec <- int_vec/sqrt(sum(int_vec^2))
+    # # const$Psi <- as.matrix(cbind(int_vec,const$Psi))
+    # # ## end testing
+    # const$XPsi <-  lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    # const$Lq <- ncol(const$Psi)
+    # ## getting appropriate penalty
+    # D <- diag(const$L)
+    # for(jj in 1:const$diff){D <- diff(D)} ## using d=4. make variable
+    # diffpen <- t(D)%*%D
+    # const$PEN <- 0*ginv(t(const$Psi)%*%ginv(diffpen)%*%const$Psi)
+
+    # # ##########################################
+    # # # No basis, only penalty on original params ## so slow to mix
+    # # ##########################################
+    #
+    # const$Psi <- diag(const$L)
+    # const$XPsi <-  lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    # const$Lq <- ncol(const$Psi)
+    # ## getting appropriate penalty
+    # D <- diag(const$L)
+    # for(jj in 1:const$diff){D <- diff(D)} ## using d=4. make variable
+    # diffpen <- t(D)%*%D
+    # const$PEN <- ginv(t(const$Psi)%*%ginv(diffpen)%*%const$Psi)
 
   }else{ ## no penalties
     const$PEN <- matrix(0,ncol=const$L,nrow=const$L)
@@ -410,7 +428,7 @@ get_starting_vals <- function(const){
   }
 
 
-  if(const$DLM==TRUE){
+  if(const$DLM==TRUE & const$DLMpenalty==TRUE){
     params$loglambda_theta <- log(rgamma(1,shape=1,rate=1))
   }else{
     params$loglambda_theta <- -Inf

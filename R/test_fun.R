@@ -3,7 +3,7 @@
 ###########################################
 set.seed(100)
 source("MVmix.R")
-n <- 100
+n <- 200
 K <- 4
 L <- 4
 X1 <- matrix(rnorm(n*L),ncol=L)
@@ -27,7 +27,7 @@ Y <- fmat+ranef+eps
 
 
 set.seed(1)
-RR <- 4000
+RR <- 500
 test1 <- MVmix(Y,X=list(X1,X2),Z=NULL,niter=RR,nburn=0.5*RR,nthin=2,
                Vgridsearch = TRUE,gridsize=10,
                maxClusters=4,DLM=FALSE,
@@ -66,31 +66,31 @@ abline(0,1,col="red")
 ###########################################
 set.seed(2)
 source("MVmix.R")
-n <- 100
-K <- 8
+n <- 500
+K <- 4
 L <- 52
 # X1 <- matrix(rnorm(n*L),ncol=L)
 X1 <- matrix(0,ncol=L,nrow=n)
 X1[,1] <- rnorm(n)
-for(ii in 2:L){X1[,ii] <- X1[,ii-1]+rnorm(n)}
+for(ii in 2:L){X1[,ii] <- 0.5*X1[,ii-1]+rnorm(n)}
 w1 <- pnorm(seq(-6,3,length=L)); w1 <- w1/sqrt(sum(w1^2)) ##
 w2 <- pnorm(-seq(-6,3,length=L)); w2 <- w2/sqrt(sum(w2^2)) ## DLM weights
 x11th <- X1%*%w1 ## k=1:4 j=1
 x21th <- X1%*%w2 ## k=5:8 j=1
-f11 <- sin(x11th/(0.5*L)) ## k=1:4 j=1
-f21 <- cos(x21th/(0.5*L)) ## k=5:8 j=1
+f11 <- sin(x11th) ## k=1:4 j=1
+f21 <- cos(x21th) ## k=5:8 j=1
 fmat <- matrix(c(rep(f11,K/2),rep(f21,K/2)),ncol=K,nrow=n,byrow=FALSE)
 ranef <- matrix(rnorm(n,0,sqrt(0.01)),ncol=K,nrow=n,byrow=FALSE)
 eps <- matrix(rnorm(n*K,0,sqrt(0.02)),ncol=K)
 Y <- fmat+ranef+eps
 
 
-RR <- 4000
+RR <- 500
 set.seed(100)
 testDLM1 <- MVmix(Y,list(X1),Z=NULL,niter=RR,nburn=0.5*RR,nthin=5,
                   Vgridsearch = TRUE,gridsize=10,
                   maxClusters=5,DLM=TRUE,sharedlambda = FALSE,lagOrder=3,
-                  approx=FALSE) ## doing MH
+                  approx=TRUE) ## doing MH
 
 summarize_clusters(testDLM1)
 
@@ -101,6 +101,11 @@ for(kk in 1:testDLM1$const$K){
   for(jj in 1:testDLM1$const$p){
     boxplot(testDLM1$omega[[jj]][,(kk-1)*L+1:L],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
+    if(kk<=testDLM1$const$K/2){
+      points(w1,col="red",cex=0.5)
+    }else{
+      points(w2,col="red",cex=0.5)
+    }
   }
 }
 
@@ -125,39 +130,39 @@ par(mfrow=c(1,1))
 #################################################
 set.seed(2)
 source("MVmix.R")
-n <- 100
+n <- 500
 K <- 4
-L <- 20
+L <- 52
 # X1 <- matrix(rnorm(n*L),ncol=L)
 X1 <- matrix(0,ncol=L,nrow=n)
 X1[,1] <- rnorm(n)
-for(ii in 2:L){X1[,ii] <- X1[,ii-1]+rnorm(n)}
+for(ii in 2:L){X1[,ii] <- 0.5*X1[,ii-1]+rnorm(n)}
 # X2 <- matrix(rnorm(n*L),ncol=L)
 X2 <- matrix(0,ncol=L,nrow=n)
 X2[,1] <- rnorm(n)
-for(ii in 2:L){X2[,ii] <- X2[,ii-1]+rnorm(n)}
+for(ii in 2:L){X2[,ii] <- 0.5*X2[,ii-1]+rnorm(n)}
 w1 <- rep(1,L); w1 <- w1/sqrt(sum(w1^2)) ##
 w2 <- pnorm(-seq(-3,3,length=L)); w2 <- w2/sqrt(sum(w2^2)) ## DLM weights
 x11th <- X1%*%w1 ## k=1 j=1
 x12th <- X2%*%w1 ## k=1 j=2
 x21th <- X1%*%w2 ## k=2 j=1
 x22th <- X2%*%w2 ## k=2 j=2
-f11 <- sin(x11th/(0.5*L)) ## k=1 j=1
-f12 <- sin(x12th/(0.5*L)) ## k=1 j=2
-f21 <- 2*cos(x21th/(0.5*L)) ## k=2 j=1
-f22 <- 2*cos(x22th/(0.5*L)) ## k=2 j=2
-fmat <- matrix(c(rep(f11,K/2),rep(f21,K/2),rep(f12,K/2),rep(f22,K/2)),ncol=K,nrow=n,byrow=FALSE)
+f11 <- sin(x11th) ## k=1 j=1
+f12 <- sin(x12th) ## k=1 j=2
+f21 <- 2*cos(x21th) ## k=2 j=1
+f22 <- 2*cos(x22th) ## k=2 j=2
+fmat <- matrix(c(rep(f11,K/2),rep(f21,K/2))+c(rep(f12,K/2),rep(f22,K/2)),ncol=K,nrow=n,byrow=FALSE)
 ranef <- matrix(rnorm(n,0,sqrt(0.01)),ncol=K,nrow=n,byrow=FALSE)
 eps <- matrix(rnorm(n*K,0,sqrt(0.02)),ncol=K)
 Y <- fmat+ranef+eps
 
 ##
-RR <- 4000
+RR <- 500
 set.seed(100)
 testDLM2 <- MVmix(Y,list(X1,X2),Z=NULL,niter=RR,nburn=0.5*RR,nthin=5,
               Vgridsearch = TRUE,gridsize=10,
-              maxClusters=5,DLM=TRUE,sharedlambda = FALSE,lagOrder=3,
-              approx=F)
+              maxClusters=5,DLM=TRUE,sharedlambda = FALSE,
+              approx=TRUE)
 
 summarize_clusters(testDLM2)
 
@@ -168,6 +173,11 @@ for(kk in 1:testDLM2$const$K){
   for(jj in 1:testDLM2$const$p){
     boxplot(testDLM2$omega[[jj]][,(kk-1)*L+1:L],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
+    if(kk<=testDLM2$const$K/2){
+      points(w1,col="red",cex=0.5)
+    }else{
+      points(w2,col="red",cex=0.5)
+    }
   }
 }
 

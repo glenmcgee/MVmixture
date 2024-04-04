@@ -27,7 +27,7 @@ build_sampler <- function(const){
   lenfun <- length(body(update_params))
 
   ## edit function with other options
-  if(const$DLM==FALSE){ ## don't use DLM penalty
+  if(const$DLM==FALSE | const$DLMpenalty==FALSE){ ## don't use DLM penalty
     for(ll in 2:(lenfun-1)){
       if(any(grepl( "update_loglambda_theta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- NULL
