@@ -125,9 +125,9 @@ par(mfrow=c(1,1))
 
 
 
-#################################################
-### Testing MVmix for multiple DLM -- not working
-#################################################
+####################################
+### Testing MVmix for multiple DLM
+####################################
 set.seed(2)
 source("MVmix.R")
 n <- 500
@@ -193,3 +193,62 @@ plot(c(mean(testDLM2$b0[,(K/2+1)])+pred$summary[[(K/2+1)]][[1]]$mean+pred$summar
 abline(0,1,col="red")
 par(mfrow=c(1,1))
 
+
+
+
+
+################
+### Testing MIM
+################
+## 2 exposures, 4 outcomes
+## first 2 outcomes have separate functional forms for each exposure
+## last 2 outcomes have a single index structure
+set.seed(100)
+source("MVmix.R")
+n <- 400
+K <- 4
+X1 <- matrix(rnorm(n*1),ncol=1)
+X2 <- matrix(rnorm(n*1),ncol=1)
+f11 <- sin(X1) ## k=1:2 j=1
+f12 <- 2*cos(X2) ## k=1:2 j=2
+f21 <- (X1+X2)^2 ## k=3:4 j=1
+f22 <- 0*X2 ## k=3:4 j=2
+fmat <- matrix(c(rep(f11,K/2),rep(f21,K/2))+c(rep(f12,K/2),rep(f22,K/2)),ncol=K,nrow=n,byrow=FALSE)
+ranef <- matrix(rnorm(n,0,sqrt(0.00001)),ncol=K,nrow=n,byrow=FALSE)
+eps <- matrix(rnorm(n*K,0,sqrt(0.005)),ncol=K)
+Y <- fmat+ranef+eps
+X <- cbind(X1,X2)
+
+
+set.seed(1)
+RR <- 500
+test2 <- MVmix(Y,X=X,Z=NULL,niter=RR,nburn=0.5*RR,nthin=2,
+               Vgridsearch = TRUE,gridsize=10,
+               maxClusters=4,MIM=TRUE,MIMorder=3,
+               approx=TRUE) ## approx=TRUE means do the taylor approx version
+
+## cluster membership
+summarize_clusters(test2)
+
+## plot weights
+test2$beta <- assign_betas(test2)
+test2$omega <- assign_omegas(test2)
+for(kk in 1:test2$const$K){
+  for(jj in 1:test2$const$p){
+    boxplot(test2$omega[[jj]][,(kk-1)*test2$const$L+1:test2$const$L],
+            ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
+  }
+}
+
+
+## fitted vals
+pred <- predict_MVmix(test2,include_intercept=FALSE)
+## intercept=FALSE--will add back in manually since we are summing two different fns
+
+lm(c(mean(test2$b0[,1])+pred$summary[[1]][[1]]$mean+pred$summary[[1]][[2]]$mean+pred$summary[[1]][[3]]$mean)~c(f11+f12))
+plot(c(mean(test2$b0[,1])+pred$summary[[1]][[1]]$mean+pred$summary[[1]][[2]]$mean+pred$summary[[1]][[3]]$mean)~c(f11+f12))
+abline(0,1,col="red")
+
+lm(c(mean(test2$b0[,(K/2+1)])+pred$summary[[(K/2+1)]][[1]]$mean+pred$summary[[(K/2+1)]][[2]]$mean+pred$summary[[(K/2+1)]][[3]]$mean)~c(f21+f22))
+plot(c(mean(test2$b0[,(K/2+1)])+pred$summary[[(K/2+1)]][[1]]$mean+pred$summary[[(K/2+1)]][[2]]$mean+pred$summary[[(K/2+1)]][[3]]$mean)~c(f21+f22))
+abline(0,1,col="red")

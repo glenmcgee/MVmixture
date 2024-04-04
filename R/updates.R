@@ -14,7 +14,7 @@ update_clustMemb <- function(params,const){
 
       ## components that get re-used repeatedly
       y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$u)
-      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
+      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
 
       ## compute probabilities for all possible a
       probs <- c(sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
@@ -30,7 +30,7 @@ update_clustMemb <- function(params,const){
 
       ## compute probabilities for all possible b
       probs <- c(sapply(1:const$C, function(b){  ## loop over a (rows; beta clusters)
-        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
       }))## to be standardized below
 
       ## sample 1 of C with correct probabilities
@@ -138,13 +138,29 @@ update_betastar <- function(params,const){
   ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
     Reduce("rbind",lapply(1:const$K,function(kk){
-      get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)
+      get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
     }))
   })
 
-  for(cc in 1:const$C){
+  if(const$MIM==TRUE){ ## for identifiability product in MIM
+    IDprodmat <- matrix(1,nrow=const$K,ncol=const$p)
+    for(kk in 1:const$K){
+      for(jj in 2:const$p){
+        IDprodmat[kk,jj] <- prod(params$Ztheta[kk,1:(jj-1)]!=params$Ztheta[kk,jj])
+      }
+    }
+  }
 
-    if(sum(params$Zbeta==cc)>0){
+  for(cc in 1:const$C){
+    if(const$MIM==TRUE){
+      n_c <- sum((params$Zbeta==cc)*IDprodmat)
+    }else{
+      n_c <- sum(params$Zbeta==cc)
+    }
+
+
+
+    if(n_c>0){
       if(const$sharedlambda==TRUE){
         lambda_beta <- params$lambda_beta
       }else{
@@ -206,6 +222,7 @@ update_betastar <- function(params,const){
 }
 
 
+
 update_thetastar <- function(params,const){
 
   for(cc in 1:const$C){
@@ -237,12 +254,12 @@ update_thetastar <- function(params,const){
       params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
       ## basis transformation to get back to omega scale
       params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
-      for(kk in whichk){
-        for(jj in whichkj[[kk]]){
-          params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const)
-          params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const)
-        }
-      }
+      # for(kk in whichk){
+      #   for(jj in whichkj[[kk]]){
+      #     params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
+      #     params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
+      #   }
+      # }
 
     }else{## if n_c=0, draw from the prior
       thetadraw <- c(rFisherBingham(1,
@@ -295,12 +312,12 @@ update_thetastar_MH_beta <- function(params, const){
         thetadraw <- get_theta(prop_params$phistar[(cc-1)*(const$Lq-1)+(1:(const$Lq-1))])
         prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
         prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
-        for(kk in whichk){
-          for(jj in whichkj[[kk]]){
-            prop_params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const)
-            prop_params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const)
-          }
-        }
+        # for(kk in whichk){
+        #   for(jj in whichkj[[kk]]){
+        #     prop_params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
+        #     prop_params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
+        #   }
+        # }
 
         ## components of likelihood
         prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$u)^2)})

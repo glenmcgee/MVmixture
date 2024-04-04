@@ -34,10 +34,12 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_sigma2=c(0.01,0.01),
                   prior_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
                   sharedlambda=TRUE,
-                  DLM=FALSE,
+                  DLM=FALSE, ## use b-spline approximation to impose smoothness over time
                   DLMpenalty=FALSE, ## include smoothness penalty over time, only if DLM=TRUE
                   lagOrder=4, ## no. of bases for omega weight function (if DLM=TRUE)
                   diff=4, ## degree of difference penalty matrix (if DLM=TRUE)
+                  MIM=FALSE, ## fit MIM version
+                  MIMorder=4, ## maximum order of MIM (ignored if MIM=FALSE)
                   ## MH tuning
                   stepsize_logrho=1, ## sd for random walk
                   stepsize_loglambda_theta=1, ## sd for random walk
@@ -72,6 +74,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                             DLMpenalty,
                             lagOrder,
                             diff,
+                            MIM,
+                            MIMorder,
                             ## MH tuning
                             stepsize_logrho,
                             stepsize_loglambda_theta,

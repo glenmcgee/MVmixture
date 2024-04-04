@@ -22,21 +22,39 @@ compute_pi <- function(params,const){
 
 
 ## get basis functions
-get_Btheta <- function(Xomega,const){
-  if(ncol(as.matrix(Xomega))>1){
-    return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xomega[,jj]))}))
-  }else{
-    return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
-  }
+get_Btheta <- function(Xomega,const,params=NULL,k,j){
+  # if(const$MIM==TRUE){
+    if(const$MIM==FALSE | j==1 ){
+      IDprod <- 1
+    }else{  ## identifiability product for MIM
+      IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
+    }
+    return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+  # }else{ ## standard version
+  #   # if(ncol(as.matrix(Xomega))>1){ ## old version allowed for a matrix of Xomega--DONT THINK WE USE IT ANYMORE BUT WILL CHECK
+  #   #   return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xomega[,jj]))}))
+  #   # }else{
+  #     return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+  #   # }
+  # }
+
 }
 
 ## get derivatives of Basis functions
-get_DerivBtheta <- function(Xomega,const){
-  if(ncol(as.matrix(Xomega))>1){
-    return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega[,jj]))}))
-  }else{
-    return(mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+get_DerivBtheta <- function(Xomega,const,params,k,j){
+  # if(const$MIM==TRUE){
+  if(const$MIM==FALSE | j==1 ){
+    IDprod <- 1
+  }else{  ## identifiability product for MIM
+    IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
   }
+  return(IDprod*mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+  ## standard version
+  # if(ncol(as.matrix(Xomega))>1){
+  #   return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega[,jj]))}))
+  # }else{
+  #   return(mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+  # }
 }
 
 
@@ -44,7 +62,7 @@ get_DerivBtheta <- function(Xomega,const){
 get_B_beta_k <- function(params,const,kk){
 
   return(sapply(1:const$p,function(jj){
-    get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
   }))
 
 }
@@ -62,7 +80,7 @@ get_B_beta <- function(params,const){
 ## compute DerivB times the corresponding beta for given k,j
 get_DerivB_beta <- function(params,const,kk,jj){
 
-  return( get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
+  return( get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
 
 }
 
@@ -250,6 +268,8 @@ initialize_const <- function(Y, ## response
                              DLMpenalty,
                              lagOrder,
                              diff,
+                             MIM,
+                             MIMorder,
                              ## MH tuning
                              stepsize_logrho,
                              stepsize_loglambda_theta,
@@ -257,6 +277,10 @@ initialize_const <- function(Y, ## response
                              gridsize,
                              rfbtries,
                              approx){
+
+  if(MIM==TRUE){
+    DLM <- FALSE ## mutually exclusive options
+  }
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
                 X=X,
@@ -283,6 +307,8 @@ initialize_const <- function(Y, ## response
                 DLMpenalty=DLMpenalty,
                 lagOrder=lagOrder,
                 diff=diff,
+                MIM=MIM,
+                MIMorder=MIMorder,
                 ## MH tuning
                 stepsize_logrho=stepsize_logrho,
                 stepsize_loglambda_theta=stepsize_loglambda_theta,
@@ -294,6 +320,9 @@ initialize_const <- function(Y, ## response
   ## indices
   if(is.list(X)==FALSE){
     const$X <- list(X)
+  }
+  if(const$MIM==TRUE){
+    const$X <- rep(const$X,const$MIMorder)
   }
   const$p <- length(const$X)
   const$n <- nrow(const$X[[1]])
@@ -467,8 +496,8 @@ get_starting_vals <- function(const){
 
   ## Get Xomega and basis functions
   Xomega <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$omegastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
-  params$Btheta <- lapply(1:const$p,function(jj){get_Btheta(Xomega[,jj],const)})
-  params$DerivBtheta <- lapply(1:const$p,function(jj){get_DerivBtheta(Xomega[,jj],const)})
+  # params$Btheta <- lapply(1:const$p,function(jj){get_Btheta(Xomega[,jj],const)})
+  # params$DerivBtheta <- lapply(1:const$p,function(jj){get_DerivBtheta(Xomega[,jj],const)})
 
   ## betastar
   params$betastar <- c(t(rmvnorm(const$C,const$mu0,diag(const$d))))

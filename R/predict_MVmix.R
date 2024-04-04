@@ -35,7 +35,7 @@ predict_MVmix <- function(obj,
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
         sapply(1:RR,function(rr){## loop over samples
-          I_b0*(obj$b0[rr,kk])+get_Btheta(newX[[jj]]%*%c(omega[[jj]][rr,(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const)%*%(beta[[jj]][rr,(kk-1)*obj$const$d+(1:obj$const$d)])
+          I_b0*(obj$b0[rr,kk])+get_Btheta(newX[[jj]]%*%c(omega[[jj]][rr,(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const,list(Ztheta=matrix(obj$Ztheta[rr,],nrow=obj$const$K,ncol=obj$const$p)),kk,jj)%*%(beta[[jj]][rr,(kk-1)*obj$const$d+(1:obj$const$d)])
         })
       })
     })
@@ -54,7 +54,7 @@ predict_MVmix <- function(obj,
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
-        Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const)
+        Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const,list(Ztheta=matrix(obj$Ztheta[1,],nrow=obj$const$K,ncol=obj$const$p)),kk,jj)
           sapply(1:RR,function(rr){## loop over samples
             I_b0*(obj$b0[rr,kk])+Btheta%*%(beta[[jj]][rr,(kk-1)*obj$const$d+(1:obj$const$d)])
         })
