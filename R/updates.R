@@ -244,7 +244,7 @@ update_thetastar <- function(params,const){
                        -0.5*exp(params$loglambda_theta)*const$PEN,
                        mtop=const$rfbtries))},
         error=function(err){ ## if rFB fails
-          print(paste0("Scaled normal approximation for omegastar in cluster ",cc))
+          # print(paste0("Scaled normal approximation for omegastar in cluster ",cc))
           approxthetadraw <-c(mvtnorm::rmvnorm(1,
                                                mean=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
                                                sigma=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)))

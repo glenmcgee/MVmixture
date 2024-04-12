@@ -214,12 +214,14 @@ assign_betas <- function(obj){
   return(betas)
 }
 
-assign_omegas <- function(obj){
+assign_omegas <- function(obj,
+                          labelswitch=FALSE){ ## force identifiability constrain post hoc
 
   thetas <- lapply(1:obj$const$p,function(jj){
     Reduce("cbind",lapply(1:obj$const$K,function(kk){
       Reduce("rbind",lapply(1:nrow(obj$Ztheta),function(rr){
-        return(obj$omegastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)])
+        omeg <- obj$omegastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)]
+        return(omeg * (-1)^{as.numeric(labelswitch)*(omeg[1])<0})
       }))
     }))
   })
