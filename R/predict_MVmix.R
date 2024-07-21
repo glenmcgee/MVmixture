@@ -32,8 +32,8 @@ predict_MVmix <- function(obj,
                           include_intercept=TRUE,
                           allx=FALSE){ ## combine all x simultaneously
 
-  beta <- assign_betas(obj)
-  omega <- assign_omegas(obj)
+  # beta <- assign_betas(obj)
+  # omega <- assign_omegas(obj)
 
   I_b0 <- as.numeric(include_intercept)
   if(allx==TRUE){
@@ -44,13 +44,13 @@ predict_MVmix <- function(obj,
     newX <- obj$const$X
   }
 
-  RR <- nrow(obj$Zbeta)
+  RR <- nrow(as.matrix(obj$sigma2))
   if(fixomega==FALSE){ ## sample theta
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
         sapply(1:RR,function(rr){## loop over samples
-          I_b0*(obj$b0[rr,kk])+get_Btheta(newX[[jj]]%*%c(omega[[jj]][rr,(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const,list(Ztheta=matrix(obj$Ztheta[rr,],nrow=obj$const$K,ncol=obj$const$p)),kk,jj)%*%(beta[[jj]][rr,(kk-1)*obj$const$d+(1:obj$const$d)])
+          I_b0*(obj$b0[rr,kk])+get_Btheta(newX[[jj]]%*%c(obj$omega[[jj]][[kk]][rr,]),obj$const,list(Ztheta=obj$Ztheta[,,rr]),kk,jj)%*%(obj$beta[[jj]][[kk]][rr,])
         })
       })
     })
@@ -59,19 +59,21 @@ predict_MVmix <- function(obj,
     if(!is.null(fixomegaval)){ ## use given value
       omega <- fixomegaval
     }else{## otherwise use mean values
-      omega <- lapply(omega,function(th){apply(th,2,mean)})
+      omega <- lapply(omega,function(omeg){
+                  lapply(omeg,function(om){
+                      apply(om,2,mean)})})
     }
     for(jj in 1:obj$const$p){ ## standardizing if necessary
       for(kk in 1:obj$const$K){
-        omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)] <- omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)]/sqrt(sum(omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)]^2))
+        omega[[jj]][[kk]] <- omega[[jj]][[kk]]/sqrt(sum(omega[[jj]][[kk]]^2))
       }
     }
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
-        Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][(kk-1)*obj$const$L+(1:obj$const$L)]),obj$const,list(Ztheta=matrix(obj$Ztheta[1,],nrow=obj$const$K,ncol=obj$const$p)),kk,jj)
+        Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][[kk]]),obj$const,list(Ztheta=obj$Ztheta[,,1]),kk,jj)
           sapply(1:RR,function(rr){## loop over samples
-            I_b0*(obj$b0[rr,kk])+Btheta%*%(beta[[jj]][rr,(kk-1)*obj$const$d+(1:obj$const$d)])
+            I_b0*(obj$b0[rr,kk])+Btheta%*%(obj$beta[[jj]][[kk]][rr,])
         })
       })
     })

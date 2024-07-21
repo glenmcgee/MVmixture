@@ -5,12 +5,21 @@
 ## function to compute pi
 compute_pi <- function(params,const){
 
-  ## compute "marginals" under independence
-  pi_beta <- params$Vbeta*c(1,cumprod(1-params$Vbeta)[-const$C])
-  pi_theta <- params$Vtheta*c(1,cumprod(1-params$Vtheta)[-const$C])
+  if(const$clustering=="both"){
+    ## compute "marginals" under independence
+    pi_beta <- params$Vbeta*c(1,cumprod(1-params$Vbeta)[-const$C])
+    pi_theta <- params$Vtheta*c(1,cumprod(1-params$Vtheta)[-const$C])
 
-  ## joint probs
-  pimat <- (pi_beta)%*%t(pi_theta) + diag(exp(params$logrho)*(pi_beta*pi_theta))
+    ## joint probs
+    pimat <- (pi_beta)%*%t(pi_theta) + diag(exp(params$logrho)*(pi_beta*pi_theta))
+
+  }else if(const$clustering=="beta"){ ## just repeat for the theta columns
+    pi_beta <- params$Vbeta*c(1,cumprod(1-params$Vbeta)[-const$Cbeta])
+    pimat <- matrix(pi_beta,nrow=length(pi_beta),ncol=max(const$fixedZtheta))
+  }else if(const$clustering=="theta"){ ## just repeat for the beta rows
+    pi_theta <- params$Vtheta*c(1,cumprod(1-params$Vtheta)[-const$Ctheta])
+    pimat <- matrix(pi_theta,byrow=TRUE,nrow=max(const$fixedZbeta),ncol=length(pi_theta))
+  }
 
   ## standardize
   pistarmat <- pimat/sum(pimat)
@@ -200,46 +209,49 @@ get_phi <- function(omegastar){
 }
 
 
+## now built into main function
+#
+# assign_betas <- function(obj){
+#
+#   betas <- lapply(1:obj$const$p,function(jj){
+#     Reduce("cbind",lapply(1:obj$const$K,function(kk){
+#       Reduce("rbind",lapply(1:nrow(obj$Zbeta),function(rr){
+#         return(obj$betastar[rr, (obj$Zbeta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$d+(1:obj$const$d)])
+#       }))
+#     }))
+#   })
+#
+#   return(betas)
+# }
+#
+# assign_omegas <- function(obj,
+#                           labelswitch=FALSE){ ## force identifiability constrain post hoc
+#
+#   thetas <- lapply(1:obj$const$p,function(jj){
+#     Reduce("cbind",lapply(1:obj$const$K,function(kk){
+#       Reduce("rbind",lapply(1:nrow(obj$Ztheta),function(rr){
+#         omeg <- obj$omegastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)]
+#         return(omeg * (-1)^{as.numeric(labelswitch)*(omeg[1])<0})
+#       }))
+#     }))
+#   })
+#
+#   return(thetas)
+# }
 
-assign_betas <- function(obj){
-
-  betas <- lapply(1:obj$const$p,function(jj){
-    Reduce("cbind",lapply(1:obj$const$K,function(kk){
-      Reduce("rbind",lapply(1:nrow(obj$Zbeta),function(rr){
-        return(obj$betastar[rr, (obj$Zbeta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$d+(1:obj$const$d)])
-      }))
-    }))
-  })
-
-  return(betas)
-}
-
-assign_omegas <- function(obj,
-                          labelswitch=FALSE){ ## force identifiability constrain post hoc
-
-  thetas <- lapply(1:obj$const$p,function(jj){
-    Reduce("cbind",lapply(1:obj$const$K,function(kk){
-      Reduce("rbind",lapply(1:nrow(obj$Ztheta),function(rr){
-        omeg <- obj$omegastar[rr, (obj$Ztheta[rr,obj$const$K*(jj-1)+kk]-1)*obj$const$L+(1:obj$const$L)]
-        return(omeg * (-1)^{as.numeric(labelswitch)*(omeg[1])<0})
-      }))
-    }))
-  })
-
-  return(thetas)
-}
 
 
-
-summarize_clusters <- function(obj){
-
-  Zbeta <- round(100*t(apply(obj$Zbeta,2,function(x) table(factor(x,levels=1:obj$const$C))))/nrow(obj$Zbeta))
-  Ztheta <- round(100*t(apply(obj$Ztheta,2,function(x) table(factor(x,levels=1:obj$const$C))))/nrow(obj$Ztheta))
-  outcome <- rep(1:obj$const$K,obj$const$p)
-  exposure <- rep(1:obj$const$p,each=obj$const$K)
-  summ <- data.frame(outcome,exposure,Zbeta=Zbeta,Ztheta=Ztheta)
-  return(summ[order(summ$outcome),])
-}
+## now built into main function
+#
+# summarize_clusters <- function(obj){
+#
+#   Zbeta <- round(100*t(apply(obj$Zbeta,2,function(x) table(factor(x,levels=1:obj$const$Cbeta))))/nrow(obj$Zbeta))
+#   Ztheta <- round(100*t(apply(obj$Ztheta,2,function(x) table(factor(x,levels=1:obj$const$Ctheta))))/nrow(obj$Ztheta))
+#   outcome <- rep(1:obj$const$K,obj$const$p)
+#   exposure <- rep(1:obj$const$p,each=obj$const$K)
+#   summ <- data.frame(outcome,exposure,Zbeta=Zbeta,Ztheta=Ztheta)
+#   return(summ[order(summ$outcome),])
+# }
 
 
 
@@ -255,6 +267,9 @@ initialize_const <- function(Y, ## response
                              nchains, ## number of chains ## not yet implemented
                              ncores, ## number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
                              ## prior hyperparameters
+                             clustering,
+                             fixedZbeta,
+                             fixedZtheta,
                              maxClusters,
                              prior_alpha_beta,
                              prior_alpha_theta,
@@ -294,6 +309,9 @@ initialize_const <- function(Y, ## response
                 nchains=nchains,
                 ncores=ncores,
                 ## prior hyperparameters
+                clustering=clustering,
+                fixedZbeta=fixedZbeta,
+                fixedZtheta=fixedZtheta,
                 maxClusters=maxClusters,
                 prior_alpha_beta=prior_alpha_beta,
                 prior_alpha_theta=prior_alpha_theta,
@@ -337,6 +355,39 @@ initialize_const <- function(Y, ## response
   }
   const$i_index <- rep(1:const$n,const$K) ## 1....1,2...2,....
   const$k_index <- rep(1:const$K,each=const$n)      ## 1:K,1:K,...
+
+  ## max number of clusters
+  ### different ONLY when clustering!="both"
+  const$Cbeta <- const$Ctheta <- const$C
+
+  ## cannot provide fixed IDs if clustering
+  if(const$clustering=="both" | const$clustering=="beta"){
+    const$fixedZbeta <- NULL
+  }
+  if(const$clustering=="both" | const$clustering=="theta"){
+    const$fixedZtheta <- NULL
+  }
+
+  ## if not clustering and no fixed IDs, set to 1:KP
+  if(const$clustering=="neither" | const$clustering=="theta"){
+    if(is.null(const$fixedZbeta)){
+      const$fixedZbeta <- matrix(1:(const$K*const$p),nrow=const$K,ncol=const$p,byrow=TRUE)
+    }else if(nrow(as.matrix(const$fixedZbeta))!=const$K | ncol(as.matrix(const$fixedZbeta))!=const$p){
+      print("Fixed Z of wrong dimension.")
+      const$fixedZbeta <- matrix(1:(const$K*const$p),nrow=const$K,ncol=const$p,byrow=TRUE)
+    }
+    const$Cbeta <- max(const$fixedZbeta)
+  }
+  if(const$clustering=="neither" | const$clustering=="beta"){
+    if(is.null(const$fixedZtheta)){
+      const$fixedZtheta <- matrix(1:(const$K*const$p),nrow=const$K,ncol=const$p,byrow=TRUE)
+    }else if(nrow(as.matrix(const$fixedZtheta))!=const$K | ncol(as.matrix(const$fixedZtheta))!=const$p){
+      print("Fixed Z of wrong dimension.")
+      const$fixedZtheta <- matrix(1:(const$K*const$p),nrow=const$K,ncol=const$p,byrow=TRUE)
+    }
+    const$Ctheta <- max(const$fixedZtheta)
+  }
+
 
   ##
   if(DLM==TRUE){ ## create penalty matrix
@@ -431,31 +482,44 @@ get_starting_vals <- function(const){
   params$alpha <- c(rgamma(1,shape=const$prior_alpha_beta[1],rate=const$prior_alpha_beta[2]),
                     rgamma(1,shape=const$prior_alpha_theta[1],rate=const$prior_alpha_theta[2]) )
 
-  params$Vbeta <- c(rbeta(const$C-1,1,params$alpha[1]),1) ## final value is 1 (truncated)
-  params$Vtheta <- c(rbeta(const$C-1,1,params$alpha[2]),1) ## final value is 1 (truncated)
+  params$Vbeta <- c(rbeta(const$Cbeta-1,1,params$alpha[1]),1) ## final value is 1 (truncated)
+  params$Vtheta <- c(rbeta(const$Ctheta-1,1,params$alpha[2]),1) ## final value is 1 (truncated)
 
-  params$logrho <- log(rgamma(1,shape=const$prior_rho[1],rate=const$prior_rho[2]))
+  if(const$clustering=="both"){ ## only defined if clustering jointly
+    params$logrho <- log(rgamma(1,shape=const$prior_rho[1],rate=const$prior_rho[2]))
+  }else{
+    params$logrho <- -999
+  }
 
-  params <- compute_pi(params,const) ## update weights pimat and pimatstar
+  if(const$clustering!="neither"){
+    params <- compute_pi(params,const) ## update weights pimat and pimatstar
 
-  ## draw Zbeta and Ztheta according to pistarmat
-  params$Zbeta <- params$Ztheta <- matrix(NA,nrow=const$K,ncol=const$p)
-  for(kk in 1:const$K){
-    for(jj in 1:const$p){
+    ## draw Zbeta and Ztheta according to pistarmat
+    params$Zbeta <- params$Ztheta <- matrix(NA,nrow=const$K,ncol=const$p)
+    for(kk in 1:const$K){
+      for(jj in 1:const$p){
         ## sample 1 of C^2 with correct probabilities
-        ab <- sample(1:(const$C^2),1,prob=c(params$pistarmat))
+        ab <- sample(1:(const$Cbeta*const$Ctheta),1,prob=c(params$pistarmat))
         ## check which a and b this corresponds to
-        Zk <- which(matrix(1:(const$C^2),ncol=const$C)==ab,arr.ind = TRUE) ## which element of CxC matrix
+        Zk <- which(matrix(1:(const$Cbeta*const$Ctheta),ncol=const$Ctheta)==ab,arr.ind = TRUE) ## which element of CxC matrix
         params$Zbeta[kk,jj] <- Zk[1]  ## a=corresponding row
         params$Ztheta[kk,jj] <- Zk[2] ## b=corresponding column
+      }
     }
+  }
+  ## use fixed IDs if not clustering
+  if(!is.null(const$fixedZbeta)){
+    params$Zbeta <- const$fixedZbeta
+  }
+  if(!is.null(const$fixedZtheta)){
+    params$Ztheta <- const$fixedZtheta
   }
 
 
   if(const$sharedlambda==TRUE){
     params$lambda_beta <- rgamma(1,shape=1,rate=1)
   }else{
-    params$lambda_beta <- rgamma(const$C,shape=1,rate=1)
+    params$lambda_beta <- rgamma(const$Cbeta,shape=1,rate=1)
   }
 
 
@@ -479,16 +543,16 @@ get_starting_vals <- function(const){
 
   ## initialize omegastar
   if(const$approx==FALSE){ ## use polar coordinate parameterization
-    params$phistar <- rbeta((const$Lq-1)*const$C,1,1)
-    params$thetastar <- sapply(1:const$C,function(cc){
+    params$phistar <- rbeta((const$Lq-1)*const$Ctheta,1,1)
+    params$thetastar <- sapply(1:const$Ctheta,function(cc){
       return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
     })
   }else{ ## otherwise just draw from fb
     params$phistar <- NULL
-    params$thetastar <- c(t(rFisherBingham(const$C,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
+    params$thetastar <- c(t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
   }
   ## convert thetastar to omegastar if necessary (Psi is just Identity if not a DLM, then omegastar=thetastar)
-  params$omegastar <- sapply(1:const$C,function(cc){
+  params$omegastar <- sapply(1:const$Ctheta,function(cc){
     return(c(const$Psi%*%params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
   })
 
@@ -502,7 +566,7 @@ get_starting_vals <- function(const){
   # params$DerivBtheta <- lapply(1:const$p,function(jj){get_DerivBtheta(Xomega[,jj],const)})
 
   ## betastar
-  params$betastar <- c(t(rmvnorm(const$C,const$mu0,diag(const$d))))
+  params$betastar <- c(t(rmvnorm(const$Cbeta,const$mu0,diag(const$d))))
 
   # intercept
   params$b0 <- rnorm(const$K)

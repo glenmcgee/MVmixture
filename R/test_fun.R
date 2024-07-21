@@ -34,14 +34,12 @@ test1 <- MVmix(Y,X=list(X1,X2),Z=NULL,niter=RR,nburn=0.5*RR,nthin=2,
                approx=TRUE) ## approx=TRUE means do the taylor approx version
 
 ## cluster membership
-summarize_clusters(test1)
+test1$cluster_summary
 
 ## plot weights
-test1$beta <- assign_betas(test1)
-test1$omega <- assign_omegas(test1)
 for(kk in 1:test1$const$K){
   for(jj in 1:test1$const$p){
-    boxplot(test1$omega[[jj]][,(kk-1)*L+1:L],
+    boxplot(test1$omega[[jj]][[kk]],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
   }
 }
@@ -92,14 +90,12 @@ testDLM1 <- MVmix(Y,list(X1),Z=NULL,niter=RR,nburn=0.5*RR,nthin=5,
                   maxClusters=5,DLM=TRUE,sharedlambda = FALSE,lagOrder=3,
                   approx=TRUE) ## doing MH
 
-summarize_clusters(testDLM1)
+testDLM1$cluster_summary
 
-testDLM1$beta <- assign_betas(testDLM1)
-testDLM1$omega <- assign_omegas(testDLM1)
 
 for(kk in 1:testDLM1$const$K){
   for(jj in 1:testDLM1$const$p){
-    boxplot(testDLM1$omega[[jj]][,(kk-1)*L+1:L],
+    boxplot(testDLM1$omega[[jj]][[kk]],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
     if(kk<=testDLM1$const$K/2){
       points(w1,col="red",cex=0.5)
@@ -164,14 +160,12 @@ testDLM2 <- MVmix(Y,list(X1,X2),Z=NULL,niter=RR,nburn=0.5*RR,nthin=5,
               maxClusters=5,DLM=TRUE,sharedlambda = FALSE,
               approx=TRUE)
 
-summarize_clusters(testDLM2)
+testDLM2$cluster_summary
 
-testDLM2$beta <- assign_betas(testDLM2)
-testDLM2$omega <- assign_omegas(testDLM2)
 
 for(kk in 1:testDLM2$const$K){
   for(jj in 1:testDLM2$const$p){
-    boxplot(testDLM2$omega[[jj]][,(kk-1)*L+1:L],
+    boxplot(testDLM2$omega[[jj]][[kk]],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
     if(kk<=testDLM2$const$K/2){
       points(w1,col="red",cex=0.5)
@@ -228,14 +222,12 @@ test2 <- MVmix(Y,X=X,Z=NULL,niter=RR,nburn=0.5*RR,nthin=2,
                approx=TRUE) ## approx=TRUE means do the taylor approx version
 
 ## cluster membership
-summarize_clusters(test2)
+test2$cluster_summary
 
 ## plot weights
-test2$beta <- assign_betas(test2)
-test2$omega <- assign_omegas(test2)
 for(kk in 1:test2$const$K){
   for(jj in 1:test2$const$p){
-    boxplot(test2$omega[[jj]][,(kk-1)*test2$const$L+1:test2$const$L],
+    boxplot(test2$omega[[jj]][[kk]],
             ylim=c(-1,1),main=paste0("k=",kk,",  j=",jj))
   }
 }

@@ -24,11 +24,9 @@ build_sampler <- function(const){
     return(params)
   }
 
-  lenfun <- length(body(update_params))
-
   ## edit function with other options
   if(const$DLM==FALSE | const$DLMpenalty==FALSE){ ## don't use DLM penalty
-    for(ll in 2:(lenfun-1)){
+    for(ll in 2:(length(body(update_params))-1)){
       if(any(grepl( "update_loglambda_theta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- NULL
       }
@@ -37,7 +35,7 @@ build_sampler <- function(const){
 
   ## replace gridsearch with MH
   if(const$Vgridsearch==FALSE){
-    for(ll in 2:(lenfun-1)){
+    for(ll in 2:(length(body(update_params))-1)){
       if(any(grepl( "update_V", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- substitute(params <- update_V_MH(params, const))
       }
@@ -46,9 +44,37 @@ build_sampler <- function(const){
 
   ## replace rfb/approximation with MH
    if(const$approx==FALSE){
-    for(ll in 2:(lenfun-1)){
+    for(ll in 2:(length(body(update_params))-1)){
       if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- substitute(params <- update_thetastar_MH_beta(params, const))
+      }
+    }
+   }
+
+  ## no joint clustering parameter unless clustering both beta and theta
+  if(const$clustering!="both"){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_logrho", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+  }
+
+  ## use only fixed clusters
+  if(const$clustering=="neither"){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_clustMemb", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_V", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_alpha", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
       }
     }
   }

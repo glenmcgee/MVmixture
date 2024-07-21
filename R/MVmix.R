@@ -23,6 +23,9 @@ MVmix <- function(Y, ## n x K matrix of responses
                   nchains=1, ## number of chains ## not yet implemented
                   ncores=1, ## number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
                   ## prior hyperparameters
+                  clustering="both", ## one of "both","theta","beta" or ,"neither";
+                  fixedZbeta=NULL,  ## optional KxP matrix of fixed cluster IDs for beta; only used if clustering="theta" or "neither"
+                  fixedZtheta=NULL, ## optional KxP matrix of fixed cluster IDs for theta; only used if clustering="theta" or "neither"
                   maxClusters=NULL,
                   prior_alpha_beta=c(1,1),
                   prior_alpha_theta=c(1,1),
@@ -59,6 +62,9 @@ MVmix <- function(Y, ## n x K matrix of responses
                             nchains, ## number of chains ## not yet implemented
                             ncores, ## number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
                             ## prior hyperparameters
+                            clustering,
+                            fixedZbeta,
+                            fixedZtheta,
                             maxClusters,
                             prior_alpha_beta,
                             prior_alpha_theta,
@@ -99,14 +105,14 @@ MVmix <- function(Y, ## n x K matrix of responses
 
     keep_Zbeta <- matrix(0,ncol=length(params_ss$Zbeta),nrow=nkeep)
     keep_Ztheta <- matrix(0,ncol=length(params_ss$Ztheta),nrow=nkeep)
-    keep_Vbeta <- matrix(0,ncol=const$C,nrow=nkeep)
-    keep_Vtheta <- matrix(0,ncol=const$C,nrow=nkeep)
-    keep_betastar <- matrix(0,ncol=const$d*const$C,nrow=nkeep)
-    keep_thetastar <- matrix(0,ncol=const$Lq*const$C,nrow=nkeep)
-    keep_omegastar <- matrix(0,ncol=const$L*const$C,nrow=nkeep)
+    keep_Vbeta <- matrix(0,ncol=const$Cbeta,nrow=nkeep)
+    keep_Vtheta <- matrix(0,ncol=const$Ctheta,nrow=nkeep)
+    keep_betastar <- matrix(0,ncol=const$d*const$Cbeta,nrow=nkeep)
+    keep_thetastar <- matrix(0,ncol=const$Lq*const$Ctheta,nrow=nkeep)
+    keep_omegastar <- matrix(0,ncol=const$L*const$Ctheta,nrow=nkeep)
     keep_alpha <- matrix(0,ncol=2,nrow=nkeep)
     keep_logrho <- matrix(0,ncol=1,nrow=nkeep)
-    keep_lambda_beta <- matrix(0,ncol=const$C,nrow=nkeep)
+    keep_lambda_beta <- matrix(0,ncol=const$Cbeta,nrow=nkeep)
     keep_loglambda_theta <- matrix(0,ncol=1,nrow=nkeep)
     keep_u <- matrix(0,ncol=const$n,nrow=nkeep)
     keep_sigma2_u <- matrix(0,ncol=1,nrow=nkeep)
@@ -190,6 +196,49 @@ MVmix <- function(Y, ## n x K matrix of responses
     # })
     # names(samples$PSR) <- names(samples)
   }
+
+  ## summarize clusters
+  Zbeta <- round(100*t(apply(samples$Zbeta,2,function(x) table(factor(x,levels=1:samples$const$Cbeta))))/nrow(samples$Zbeta))
+  Ztheta <- round(100*t(apply(samples$Ztheta,2,function(x) table(factor(x,levels=1:samples$const$Ctheta))))/nrow(samples$Ztheta))
+  outcome <- rep(1:samples$const$K,samples$const$p)
+  exposure <- rep(1:samples$const$p,each=samples$const$K)
+  summ <- data.frame(outcome,exposure,Zbeta=Zbeta,Ztheta=Ztheta)
+  samples$cluster_summary <- summ[order(summ$outcome),]
+
+  ## convert big matrix of Z to array (KxPxR)
+  samples$Zbeta <- array(t(samples$Zbeta),dim=c(samples$const$K,samples$const$p,nrow(samples$Zbeta)))
+  samples$Ztheta <- array(t(samples$Ztheta),dim=c(samples$const$K,samples$const$p,nrow(samples$Ztheta)))
+
+  ## convert big coefficient matrices to lists of length C
+  samples$betastar <- lapply(1:samples$const$Cbeta,function(cc)
+    samples$betastar[,(cc-1)*samples$const$d+(1:samples$const$d)])
+  samples$thetastar <- lapply(1:samples$const$Ctheta,function(cc)
+    samples$thetastar[,(cc-1)*samples$const$Lq+(1:samples$const$Lq)])
+  samples$omegastar <- lapply(1:samples$const$Ctheta,function(cc)
+    samples$omegastar[,(cc-1)*samples$const$L+(1:samples$const$L)])
+
+  ## assign beta and theta from betastar and thetastar
+  samples$beta <- lapply(1:samples$const$p,function(jj){
+                    lapply(1:samples$const$K,function(kk){
+                      Reduce("rbind",lapply(1:nrow(samples$betastar[[1]]),function(rr){
+                        return(samples$betastar[[samples$Zbeta[kk,jj,rr]]][rr,])
+                      }))
+                    })
+                   })
+  samples$theta <- lapply(1:samples$const$p,function(jj){
+                      lapply(1:samples$const$K,function(kk){
+                        Reduce("rbind",lapply(1:nrow(samples$thetastar[[1]]),function(rr){
+                          return(samples$thetastar[[samples$Ztheta[kk,jj,rr]]][rr,])
+                        }))
+                      })
+                    })
+  samples$omega <- lapply(1:samples$const$p,function(jj){
+    lapply(1:samples$const$K,function(kk){
+      Reduce("rbind",lapply(1:nrow(samples$omegastar[[1]]),function(rr){
+        return(samples$omegastar[[samples$Ztheta[kk,jj,rr]]][rr,])
+      }))
+    })
+  })
 
   return(samples)
 }

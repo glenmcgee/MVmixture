@@ -10,32 +10,36 @@ update_clustMemb <- function(params,const){
   for(kk in 1:const$K){## loop over outcomes
     for(jj in 1:const$p){## loop over exposures
 
-      ## Zbetakj ##
-
       ## components that get re-used repeatedly
       y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$u)
       Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
 
-      ## compute probabilities for all possible a
-      probs <- c(sapply(1:const$C, function(a){  ## loop over a (rows; beta clusters)
-        exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2)*sum((y_B_u-Bth_kj%*%params$betastar[(a-1)*const$d+(1:const$d)])^2))
-      })) ## to be standardized below
+      ## Zbetakj ##
+      if(const$clustering=="both" | const$clustering=="beta"){
 
-      ## sample 1 of C with correct probabilities
-      tryCatch({params$Zbeta[kk,jj] <- sample(1:const$C,1,prob=probs/sum(probs))}, ## standardized probs
-               error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
+        ## compute probabilities for all possible a
+        probs <- c(sapply(1:const$Cbeta, function(a){  ## loop over a (rows; beta clusters)
+          exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2)*sum((y_B_u-Bth_kj%*%params$betastar[(a-1)*const$d+(1:const$d)])^2))
+        })) ## to be standardized below
+
+        ## sample 1 of C with correct probabilities
+        tryCatch({params$Zbeta[kk,jj] <- sample(1:const$Cbeta,1,prob=probs/sum(probs))}, ## standardized probs
+                 error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
+      }
 
 
       ## Zthetakj ##
+      if(const$clustering=="both" | const$clustering=="theta"){
+        ## compute probabilities for all possible b
+        probs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
+          exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+        }))## to be standardized below
 
-      ## compute probabilities for all possible b
-      probs <- c(sapply(1:const$C, function(b){  ## loop over a (rows; beta clusters)
-        exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
-      }))## to be standardized below
+        ## sample 1 of C with correct probabilities
+        tryCatch({params$Ztheta[kk,jj] <- sample(1:const$Ctheta,1,prob=probs/sum(probs))},
+                 error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
+      }
 
-      ## sample 1 of C with correct probabilities
-      tryCatch({params$Ztheta[kk,jj] <- sample(1:const$C,1,prob=probs/sum(probs))},
-               error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
     }
 
   }
@@ -51,12 +55,16 @@ update_V <- function(params,const){
   for(cc in 1:(const$C-1)){
 
     ## sample V_c^beta
-    probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=TRUE,const) })) ## looping over grid, compute density
-    params$Vbeta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+    if(const$clustering=="both" | const$clustering=="beta"){
+      probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=TRUE,const) })) ## looping over grid, compute density
+      params$Vbeta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+    }
 
     ## sample V_c^theta
-    probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=FALSE,const) })) ## looping over grid, compute density
-    params$Vtheta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+    if(const$clustering=="both" | const$clustering=="theta"){
+      probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=FALSE,const) })) ## looping over grid, compute density
+      params$Vtheta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+    }
 
   }
   ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
@@ -73,48 +81,54 @@ update_V_MH <- function(params,const){
   for(cc in 1:(const$C-1)){
 
     ## update Vbeta ##
-    prop_params <- params
+    if(const$clustering=="both" | const$clustering=="beta"){
+      prop_params <- params
 
-    ## setting minimum of shape2 param to be 1 for proposals
-    s1 <- 1+nbeta[cc]
-    s2 <- max(1,prop_params$alpha[1]+sum(nbeta[(cc+1):const$C]))
-    prop_params$Vbeta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
+      ## setting minimum of shape2 param to be 1 for proposals
+      s1 <- 1+nbeta[cc]
+      s2 <- max(1,prop_params$alpha[1]+sum(nbeta[(cc+1):const$C]))
+      prop_params$Vbeta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
 
-    ## compute log-acceptance ratio
-    logPostRatio <- get_Vlogdensity(prop_params$Vbeta[cc],cc,prop_params,Vbeta=TRUE,const)-
-      get_Vlogdensity(params$Vbeta[cc],cc,params,Vbeta=TRUE,const)
+      ## compute log-acceptance ratio
+      logPostRatio <- get_Vlogdensity(prop_params$Vbeta[cc],cc,prop_params,Vbeta=TRUE,const)-
+        get_Vlogdensity(params$Vbeta[cc],cc,params,Vbeta=TRUE,const)
 
-    logPropRatio <- dbeta(prop_params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
-      dbeta(params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)
+      logPropRatio <- dbeta(prop_params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
+        dbeta(params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)
 
-    logRatio <- logPostRatio-logPropRatio
-    if(log(runif(1,0,1)) < logRatio){ ## accept
-      ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
-      prop_params <- compute_pi(prop_params,const)
-      params <- prop_params
+      logRatio <- logPostRatio-logPropRatio
+      if(log(runif(1,0,1)) < logRatio){ ## accept
+        ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
+        prop_params <- compute_pi(prop_params,const)
+        params <- prop_params
+      }
     }
+
 
 
     ## update Vtheta ##
-    prop_params <- params
-    ## setting minimum of shape2 param to be 1 for proposals
-    s1 <- 1+ntheta[cc]
-    s2 <- max(1,prop_params$alpha[2]+sum(ntheta[(cc+1):const$C]))
-    prop_params$Vtheta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
+    if(const$clustering=="both" | const$clustering=="theta"){
+      prop_params <- params
+      ## setting minimum of shape2 param to be 1 for proposals
+      s1 <- 1+ntheta[cc]
+      s2 <- max(1,prop_params$alpha[2]+sum(ntheta[(cc+1):const$C]))
+      prop_params$Vtheta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
 
-    ## compute log-acceptance ratio
-    logPostRatio <- get_Vlogdensity(prop_params$Vtheta[cc],cc,prop_params,Vbeta=FALSE,const)-
-      get_Vlogdensity(params$Vtheta[cc],cc,params,Vbeta=FALSE,const)
+      ## compute log-acceptance ratio
+      logPostRatio <- get_Vlogdensity(prop_params$Vtheta[cc],cc,prop_params,Vbeta=FALSE,const)-
+        get_Vlogdensity(params$Vtheta[cc],cc,params,Vbeta=FALSE,const)
 
-    logPropRatio <- dbeta(prop_params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
-      dbeta(params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)
+      logPropRatio <- dbeta(prop_params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
+        dbeta(params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)
 
-    logRatio <- logPostRatio-logPropRatio
-    if(log(runif(1,0,1)) < logRatio){ ## accept
-      ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
-      prop_params <- compute_pi(prop_params,const)
-      params <- prop_params
+      logRatio <- logPostRatio-logPropRatio
+      if(log(runif(1,0,1)) < logRatio){ ## accept
+        ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
+        prop_params <- compute_pi(prop_params,const)
+        params <- prop_params
+      }
     }
+
 
   }
 
@@ -134,7 +148,6 @@ update_intercept <- function(params,const){
 
 
 update_betastar <- function(params,const){
-
   ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
     Reduce("rbind",lapply(1:const$K,function(kk){
@@ -151,7 +164,7 @@ update_betastar <- function(params,const){
     }
   }
 
-  for(cc in 1:const$C){
+  for(cc in 1:const$Cbeta){
     if(const$MIM==TRUE){
       n_c <- sum((params$Zbeta==cc)*IDprodmat)
     }else{
@@ -225,7 +238,7 @@ update_betastar <- function(params,const){
 
 update_thetastar <- function(params,const){
 
-  for(cc in 1:const$C){
+  for(cc in 1:const$Ctheta){
     if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
       whichZ <- which(params$Ztheta==cc,arr.ind=TRUE)
       whichk <- sort(unique(whichZ[,1]))
@@ -279,7 +292,7 @@ update_thetastar <- function(params,const){
 ## do MH on reparameterized index with beta proposals
 update_thetastar_MH_beta <- function(params, const){
 
-  for(cc in 1:const$C){
+  for(cc in 1:const$Cbeta){
     if(sum(params$Ztheta==cc)>0){ ## n_c>0 (otherwise draw from prior)
 
       whichZ <- which(params$Ztheta==cc,arr.ind=TRUE)
@@ -365,10 +378,19 @@ update_thetastar_MH_beta <- function(params, const){
 
 update_alpha <- function(params,const){
 
-  params$alpha <- c(
-    rgamma(1,shape=const$prior_alpha_beta[1]+const$C-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$C]))),
-    rgamma(1,shape=const$prior_alpha_theta[1]+const$C-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$C])))
-  )
+
+  if(const$clustering=="both" | const$clustering=="beta"){
+    params$alpha[1] <- rgamma(1,shape=const$prior_alpha_beta[1]+const$Cbeta-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$Cbeta])))
+  }
+  if(const$clustering=="both" | const$clustering=="theta"){
+    params$alpha[2] <- rgamma(1,shape=const$prior_alpha_theta[1]+const$Ctheta-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$Ctheta])))
+  }
+
+  # params$alpha <- c(
+  #   rgamma(1,shape=const$prior_alpha_beta[1]+const$C-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$C]))),
+  #   rgamma(1,shape=const$prior_alpha_theta[1]+const$C-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$C])))
+  # )
+
   return(params) ## alpha_beta then alpha_theta
 }
 
@@ -400,15 +422,15 @@ update_logrho <- function(params,const){
 update_lambda_beta <- function(params,const){
 
   if(const$sharedlambda==TRUE){
-    gamrate <- const$prior_lambda_beta[2]+0.5*sum(sapply(1:const$C, ## summing over all clusters cc
+    gamrate <- const$prior_lambda_beta[2]+0.5*sum(sapply(1:const$Cbeta, ## summing over all clusters cc
                                                          function(cc){c(t(params$betastar[(cc-1)*const$d+(1:const$d)])%*%const$invSig0%*%params$betastar[(cc-1)*const$d+(1:const$d)])}))
     if(is.finite(gamrate)){
       params$lambda_beta <- rgamma(1,
-                                   shape=const$prior_lambda_beta[1]+0.5*const$C*const$d,
+                                   shape=const$prior_lambda_beta[1]+0.5*const$Cbeta*const$d,
                                    rate=gamrate)
     }
   }else{
-    for(cc in 1:const$C){
+    for(cc in 1:const$Cbeta){
 
       params$lambda_beta[cc] <- rgamma(1,
                                        shape=const$prior_lambda_beta[1]+0.5*const$d,
@@ -428,12 +450,12 @@ update_loglambda_theta <- function(params,const){
   prop_params$loglambda_theta <- params$loglambda_theta+rnorm(1,0,const$stepsize_loglambda_theta)
 
   ## compute log-acceptance ratio
-  logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$C, ## summing over all clusters cc
+  logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
                                                                   function(cc){c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
-                        - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
-    (-0.5*exp(params$loglambda_theta)*sum(sapply(1:const$C, ## summing over all clusters cc
+                        - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
+    (-0.5*exp(params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
                                                       function(cc){c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
-            - const$C*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
+            - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
 
   logPriorRatio <- dgamma(exp(prop_params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)-
     dgamma(exp(params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)+
