@@ -64,13 +64,13 @@ abline(0,1,col="red")
 ###########################################
 set.seed(2)
 source("MVmix.R")
-n <- 500
+n <- 100
 K <- 4
 L <- 52
 # X1 <- matrix(rnorm(n*L),ncol=L)
 X1 <- matrix(0,ncol=L,nrow=n)
 X1[,1] <- rnorm(n)
-for(ii in 2:L){X1[,ii] <- 0.5*X1[,ii-1]+rnorm(n)}
+for(ii in 2:L){X1[,ii] <- 0.9*X1[,ii-1]+0.1*rnorm(n)}
 w1 <- pnorm(seq(-6,3,length=L)); w1 <- w1/sqrt(sum(w1^2)) ##
 w2 <- pnorm(-seq(-6,3,length=L)); w2 <- w2/sqrt(sum(w2^2)) ## DLM weights
 x11th <- X1%*%w1 ## k=1:4 j=1

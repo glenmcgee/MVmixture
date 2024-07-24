@@ -258,9 +258,13 @@ update_thetastar <- function(params,const){
                        mtop=const$rfbtries))},
         error=function(err){ ## if rFB fails
           # print(paste0("Scaled normal approximation for omegastar in cluster ",cc))
+          PRECmat <- (1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN
+          PRECmat <- (PRECmat+t(PRECmat))/2
+          Vmat <- solve(PRECmat)
+          Vmat <- (Vmat+t(Vmat))/2
           approxthetadraw <-c(mvtnorm::rmvnorm(1,
-                                               mean=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
-                                               sigma=solve((1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN)))
+                                               mean=Vmat%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
+                                               sigma=Vmat))
           return(approxthetadraw/sqrt(sum(approxthetadraw^2)))
         }
       )
@@ -450,12 +454,21 @@ update_loglambda_theta <- function(params,const){
   prop_params$loglambda_theta <- params$loglambda_theta+rnorm(1,0,const$stepsize_loglambda_theta)
 
   ## compute log-acceptance ratio
+  # logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
+  #                                                                 function(cc){c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
+  #                       - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
+  #   (-0.5*exp(params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
+  #                                                     function(cc){c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
+  #           - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
+
   logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
                                                                   function(cc){c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
-                        - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
+                        - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=0.5*exp(prop_params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) -  ## third element is third order approximation
     (-0.5*exp(params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
                                                       function(cc){c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])}))
-            - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=-0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
+            - const$Ctheta*(fb.saddle(gam=const$prior_tau_theta*rep(1,const$Lq),lam=0.5*exp(params$loglambda_theta)*eigen(const$PEN)$values)[3]) ) ## third element is third order approximation
+  ## NOTE: fb.saddle uses the parameterization form Kume and wood 2005; rFisherBingham above uses a different one. Hence we have no negative in the lam term here; but we had negative in the Aplus term above
+
 
   logPriorRatio <- dgamma(exp(prop_params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)-
     dgamma(exp(params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)+

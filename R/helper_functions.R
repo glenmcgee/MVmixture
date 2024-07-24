@@ -392,22 +392,40 @@ initialize_const <- function(Y, ## response
   ##
   if(DLM==TRUE){ ## create penalty matrix
 
-    # ###########################################
-    # ## B splines (with difference penalty like gasparrini)
-    # ## Works well on uncorrelated X
-    # ###########################################
-    QQ <- dlnm::ps(1:const$L,diff=const$diff)
+    #########################################
+    ## B splines (with difference penalty) ##
+    QQ <- dlnm::ps(1:const$L,
+                   diff=const$diff, ## not actually used
+                   df=const$lagOrder, ## number of basis functions
+                   intercept=TRUE)
     B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
     qrB <- qr(B1)
     Q <- qr.Q(qrB)
-    R <- qr.R(qrB)
     const$Psi <- Q
-    const$Lq <- ncol(const$Psi)
+    const$Lq <- ncol(const$Psi) ## =lagOrder
     const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
-    const$PEN <- ginv(R%*%ginv(attr(QQ,"S"))%*%t(R))
-    if(const$DLMpenalty==FALSE){
-      const$PEN <- 0*const$PEN
-    }
+    # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
+    DDtemp <- diag(const$L)
+    for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
+    PEN <- ginv(t(Q) %*% ginv(t(DDtemp) %*% DDtemp) %*% Q)
+    const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
+
+    # # ###########################################
+    # # ## B splines (with difference penalty like gasparrini)
+    # # ## Works well on uncorrelated X
+    # # ###########################################
+    # QQ <- dlnm::ps(1:const$L,diff=const$diff)
+    # B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
+    # qrB <- qr(B1)
+    # Q <- qr.Q(qrB)
+    # R <- qr.R(qrB)
+    # const$Psi <- Q
+    # const$Lq <- ncol(const$Psi)
+    # const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+    # const$PEN <- ginv(R%*%ginv(attr(QQ,"S"))%*%t(R))
+    # if(const$DLMpenalty==FALSE){
+    #   const$PEN <- 0*const$PEN
+    # }
 
     # ##########################################
     # # Working smoothed covariance (Ander's version)
@@ -524,7 +542,7 @@ get_starting_vals <- function(const){
 
 
   if(const$DLM==TRUE & const$DLMpenalty==TRUE){
-    params$loglambda_theta <- log(rgamma(1,shape=1,rate=1))
+    params$loglambda_theta <- log(rgamma(1,shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2]))
   }else{
     params$loglambda_theta <- -Inf
   }

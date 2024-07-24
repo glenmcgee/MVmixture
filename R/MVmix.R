@@ -39,8 +39,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                   sharedlambda=TRUE,
                   DLM=FALSE, ## use b-spline approximation to impose smoothness over time
                   DLMpenalty=FALSE, ## include smoothness penalty over time, only if DLM=TRUE
-                  lagOrder=4, ## no. of bases for omega weight function (if DLM=TRUE)
-                  diff=4, ## degree of difference penalty matrix (if DLM=TRUE)
+                  lagOrder=10, ## no. of bases for omega weight function (if DLM=TRUE)
+                  diff=8, ## degree of difference penalty matrix (if DLM=TRUE)
                   MIM=FALSE, ## fit MIM version
                   MIMorder=4, ## maximum order of MIM (ignored if MIM=FALSE)
                   ## MH tuning
