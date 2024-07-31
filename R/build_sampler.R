@@ -25,7 +25,23 @@ build_sampler <- function(const){
   }
 
   ## edit function with other options
-  if(const$DLM==FALSE | const$DLMpenalty==FALSE){ ## don't use DLM penalty
+
+  ## single outcome, no random intercepts
+  if(const$K==1){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_sigma2_u", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_u", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+  }
+
+  ## don't use DLM penalty
+  if(const$DLM==FALSE | const$DLMpenalty==FALSE){
     for(ll in 2:(length(body(update_params))-1)){
       if(any(grepl( "update_loglambda_theta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- NULL

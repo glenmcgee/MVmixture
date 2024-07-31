@@ -31,35 +31,38 @@ predict_MVmix <- function(obj,
                           fixomegaval=NULL,
                           include_intercept=TRUE,
                           allx=FALSE){ ## combine all x simultaneously
-  
+
   # beta <- assign_betas(obj)
   # omega <- assign_omegas(obj)
-  
+
   I_b0 <- as.numeric(include_intercept)
   if(allx==TRUE){
     I_b0 <- 0 ## so we dont double count
   }
-  
+
   if(is.null(newX)){
     newX <- obj$const$X
   }
-  
+  if(!is.list(newX)){
+    newX <- rep(list(newX), obj$const$p)
+  }
+
   RR <- nrow(as.matrix(obj$sigma2))
   if(fixomega==FALSE){ ## sample theta
-    
+
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
         sapply(1:RR,function(rr){## loop over samples
           I_b0*(obj$b0[rr,kk])+
             get_Btheta(newX[[jj]]%*%c(obj$omega[[jj]][[kk]][rr,]),obj$const,
-                                          list(Ztheta=matrix(obj$Ztheta[,,rr], 
+                                          list(Ztheta=matrix(obj$Ztheta[,,rr],
                                                              nrow=obj$const$K)),kk,jj)%*%
             (obj$beta[[jj]][[kk]][rr,])
         })
       })
     })
   }else{ ## otherwise use fixed theta
-    
+
     if(!is.null(fixomegaval)){ ## use given value
       omega <- fixomegaval
     }else{## otherwise use mean values
@@ -72,20 +75,20 @@ predict_MVmix <- function(obj,
         omega[[jj]][[kk]] <- omega[[jj]][[kk]]/sqrt(sum(omega[[jj]][[kk]]^2))
       }
     }
-    
+
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
         Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][[kk]]),
-                             obj$const,list(Ztheta=matrix(obj$Ztheta[,,1], 
+                             obj$const,list(Ztheta=matrix(obj$Ztheta[,,1],
                                                           nrow=obj$const$K)),kk,jj)
         sapply(1:RR,function(rr){## loop over samples
           I_b0*(obj$b0[rr,kk])+Btheta%*%(obj$beta[[jj]][[kk]][rr,])
         })
       })
     })
-    
+
   }
-  
+
   if(allx==TRUE){
     summpred <- summarize_pred_all(pred,obj,include_intercept)
   }else{

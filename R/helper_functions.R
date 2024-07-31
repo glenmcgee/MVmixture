@@ -550,14 +550,16 @@ get_starting_vals <- function(const){
   # params$sigma2 <- 1/rgamma(1,shape=const$prior_sigma2[1],rate=const$prior_sigma2[2])
   params$sigma2 <- 1/rgamma(1,shape=10,rate=10)
 
-  # params$sigma2_u <- 1/rgamma(1,shape=const$prior_sigma2_u[1],rate=const$prior_sigma2_u[2])
-  params$sigma2_u <- 1/rgamma(1,shape=10,rate=10)
+  #
+  if(const$K>1){
+    params$sigma2_u <- 1/rgamma(1,shape=10,rate=10)
 
-  ## testing
-  params$sigma2 <- 0.05
-  params$sigma2_u <- 0.00001
+    params$u <- rnorm(const$n,0,sqrt(params$sigma2_u))
+  }else{
+    params$sigma2_u <- 0
+    params$u <- rep(0,const$n)
+  }
 
-  params$u <- rnorm(n,0,sqrt(params$sigma2_u))
 
   ## initialize omegastar
   if(const$approx==FALSE){ ## use polar coordinate parameterization
