@@ -392,23 +392,37 @@ initialize_const <- function(Y, ## response
   ##
   if(DLM==TRUE){ ## create penalty matrix
 
-    #########################################
-    ## B splines (with difference penalty) ##
-    QQ <- dlnm::ps(1:const$L,
-                   diff=const$diff, ## not actually used
-                   df=const$lagOrder, ## number of basis functions
-                   intercept=TRUE)
-    B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
-    qrB <- qr(B1)
-    Q <- qr.Q(qrB)
-    const$Psi <- Q
-    const$Lq <- ncol(const$Psi) ## =lagOrder
-    const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
-    # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
-    DDtemp <- diag(const$L)
-    for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
-    PEN <- ginv(t(Q) %*% ginv(t(DDtemp) %*% DDtemp) %*% Q)
-    const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
+    if(!is.null(const$lagOrder)){
+      #########################################
+      ## B splines (with difference penalty) ##
+      QQ <- dlnm::ps(1:const$L,
+                     diff=const$diff, ##
+                     df=const$lagOrder, ##
+                     intercept=TRUE)
+      B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
+      qrB <- qr(B1)
+      Q <- qr.Q(qrB)
+      const$Psi <- Q
+      const$Lq <- ncol(const$Psi) ## =lagOrder
+      const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+      # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
+      DDtemp <- diag(const$L)
+      for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
+      PEN <- ginv(t(Q) %*% ginv(t(DDtemp) %*% DDtemp) %*% Q)
+      const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
+
+    }else{## if is.null(lagOrder) --> dont do basis expansion (no dimension reduction), but still do penalty
+
+      const$Psi <- diag(const$L)
+      const$Lq <- const$L
+      const$XPsi <- const$X #lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+      D <- diag(const$L)
+      for(jj in 1:const$diff){D <- diff(D)}
+      diffpen <- t(D)%*%D ## gives same as dlnm::ps(1:L,diff=diff,df=L,intercept=TRUE)
+      const$PEN <- ginv(diffpen)
+
+    }
+
 
     # # ###########################################
     # # ## B splines (with difference penalty like gasparrini)
