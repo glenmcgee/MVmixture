@@ -419,7 +419,7 @@ initialize_const <- function(Y, ## response
       D <- diag(const$L)
       for(jj in 1:const$diff){D <- diff(D)}
       diffpen <- t(D)%*%D ## gives same as dlnm::ps(1:L,diff=diff,df=L,intercept=TRUE)
-      const$PEN <- ginv(diffpen)
+      const$PEN <- diffpen
 
     }
 
