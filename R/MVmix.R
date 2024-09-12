@@ -126,7 +126,7 @@ MVmix <- function(Y, ## n x K matrix of responses
       params_ss <- update_params(params_ss)
 
       ## retain samples after burn-in and thinning
-      if(ss>nburn & ss%%nthin==0){
+      if(ss>nburn & (ss-nburn)%%nthin==0){
         skeep <- (ss-nburn)/nthin
 
         keep_Zbeta[skeep,] <- c(params_ss$Zbeta)
