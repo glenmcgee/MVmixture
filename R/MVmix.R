@@ -32,7 +32,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_rho=c(1,1),
                   prior_tau_theta=1,
                   prior_lambda_beta=c(1,1),
-                  prior_lambda_theta=c(1,1),
+                  prior_lambda_theta=c(1,0.0001),
                   prior_sigma2_u=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
                   prior_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
