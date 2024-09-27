@@ -17,8 +17,8 @@ build_sampler <- function(const){
     params <- update_lambda_beta(params,const)
     params <- update_loglambda_theta(params,const) ## update DLM penalty
     params <- update_u(params,const)
-    params <- update_sigma2_u(params,const)
-    params <- update_sigma2(params,const)
+    params <- update_xi(params,const)
+    params <- update_sigma2_k(params,const)
     params <- update_intercept(params,const)
 
     return(params)
@@ -29,13 +29,18 @@ build_sampler <- function(const){
   ## single outcome, no random intercepts
   if(const$K==1){
     for(ll in 2:(length(body(update_params))-1)){
-      if(any(grepl( "update_sigma2_u", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+      if(any(grepl( "update_xi", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- NULL
       }
     }
     for(ll in 2:(length(body(update_params))-1)){
       if(any(grepl( "update_u", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- NULL
+      }
+    }
+    for(ll in 2:(length(body(update_params))-1)){ ## use conjugate
+      if(any(grepl( "update_sigma2_k", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- substitute(params <- update_sigma2(params, const))
       }
     }
   }

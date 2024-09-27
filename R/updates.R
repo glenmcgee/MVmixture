@@ -11,7 +11,7 @@ update_clustMemb <- function(params,const){
     for(jj in 1:const$p){## loop over exposures
 
       ## components that get re-used repeatedly
-      y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$u)
+      y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u)
       Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
 
       ## Zbetakj ##
@@ -19,7 +19,7 @@ update_clustMemb <- function(params,const){
 
         ## compute probabilities for all possible a
         probs <- c(sapply(1:const$Cbeta, function(a){  ## loop over a (rows; beta clusters)
-          exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2)*sum((y_B_u-Bth_kj%*%params$betastar[(a-1)*const$d+(1:const$d)])^2))
+          exp(log(params$pimat[a,params$Ztheta[kk,jj]]) -(0.5/params$sigma2[kk])*sum((y_B_u-Bth_kj%*%params$betastar[(a-1)*const$d+(1:const$d)])^2))
         })) ## to be standardized below
 
         ## sample 1 of C with correct probabilities
@@ -32,7 +32,7 @@ update_clustMemb <- function(params,const){
       if(const$clustering=="both" | const$clustering=="theta"){
         ## compute probabilities for all possible b
         probs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
-          exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2)*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+          exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
         }))## to be standardized below
 
         ## sample 1 of C with correct probabilities
@@ -71,6 +71,7 @@ update_V <- function(params,const){
   params <- compute_pi(params,const)
   return(params)
 }
+
 
 ## MH step for V
 update_V_MH <- function(params,const){
@@ -135,18 +136,19 @@ update_V_MH <- function(params,const){
   return(params)
 }
 
+
 update_intercept <- function(params,const){
 
   for(kk in 1:const$K){
     params$b0[kk] <- rnorm(1,
-                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u))/(const$n),
-                       sd=sqrt(params$sigma2/(const$n)))
+                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u))/(const$n),
+                       sd=sqrt(params$sigma2[kk]/(const$n)))
   }
 
   return(params)
 }
 
-
+##
 update_betastar <- function(params,const){
   ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
@@ -188,7 +190,7 @@ update_betastar <- function(params,const){
       ## Btheta for relevant k,j pairs
       B_kc <- lapply(whichk,function(kk){
         Reduce("+",lapply(whichkj[[kk]],function(jj){
-          Btheta[[jj]][const$k_index==kk,]
+          Btheta[[jj]][const$k_index==kk,]/sqrt(params$sigma2[kk]) ## sqrt since it gets squared in BTB
         }))
       })
 
@@ -197,13 +199,13 @@ update_betastar <- function(params,const){
 
       ##
       y_u_B_k <- lapply(whichk,function(kk){
-          y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$u
+          y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$xi*sqrt(params$sigma2[kk])*params$u
             if(length(whichkNotj[[kk]])>0){
               y_u <- y_u - Reduce("+",lapply(whichkNotj[[kk]],function(jj){
                 Btheta[[jj]][const$k_index==kk,]%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
               }))
             }
-          return(y_u)
+          return(y_u/sqrt(params$sigma2[kk])) ## sqrt because it multiples B
       })
 
       ##
@@ -212,10 +214,10 @@ update_betastar <- function(params,const){
       }))
 
       ## compute Vmat only once ## summing over all k in cluster cc
-      Vmat <- solve(lambda_beta*const$invSig0+(1/params$sigma2)*BTB)
+      Vmat <- solve(lambda_beta*const$invSig0+BTB)
 
       params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
-                                                             mean=Vmat%*%t(lambda_beta*t(const$mu0)%*%const$invSig0+(1/params$sigma2)*yTB  ),
+                                                             mean=Vmat%*%t(lambda_beta*t(const$mu0)%*%const$invSig0+yTB  ),
                                                              sigma=Vmat)
 
 
@@ -235,7 +237,7 @@ update_betastar <- function(params,const){
 }
 
 
-
+##
 update_thetastar <- function(params,const){
 
   for(cc in 1:const$Ctheta){
@@ -252,18 +254,18 @@ update_thetastar <- function(params,const){
 
       thetadraw <-tryCatch({
         c(rFisherBingham(1,
-                       mu = const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy,#XtWkyhat,
-                       Aplus = -(0.5/params$sigma2)*XTX#XtWX
+                       mu = const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + XTy,#XtWkyhat,
+                       Aplus = -0.5*XTX#XtWX
                        -0.5*exp(params$loglambda_theta)*const$PEN,
                        mtop=const$rfbtries))},
         error=function(err){ ## if rFB fails
           # print(paste0("Scaled normal approximation for omegastar in cluster ",cc))
-          PRECmat <- (1/params$sigma2)*XTX+exp(params$loglambda_theta)*const$PEN
+          PRECmat <- XTX+exp(params$loglambda_theta)*const$PEN
           PRECmat <- (PRECmat+t(PRECmat))/2
           Vmat <- solve(PRECmat)
           Vmat <- (Vmat+t(Vmat))/2
           approxthetadraw <-c(mvtnorm::rmvnorm(1,
-                                               mean=Vmat%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + (1/params$sigma2)*XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
+                                               mean=Vmat%*%(const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + XTy),#mean=solve((1/params$sigma2)*XtWX+exp(params$loglambda_theta)*const$PEN)%*%(const$prior_tau_theta*as.matrix(rep(1,const$L)) + (1/params$sigma2)*XtWkyhat),
                                                sigma=Vmat))
           return(approxthetadraw/sqrt(sum(approxthetadraw^2)))
         }
@@ -291,7 +293,6 @@ update_thetastar <- function(params,const){
 
   return(params)
 }
-
 
 ## do MH on reparameterized index with beta proposals
 update_thetastar_MH_beta <- function(params, const){
@@ -337,12 +338,12 @@ update_thetastar_MH_beta <- function(params, const){
         # }
 
         ## components of likelihood
-        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$u)^2)})
-        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u)^2)})
+        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2)/prop_params$sigma2[kk]})
+        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u)^2)/params$sigma2[kk]})
 
         ## calculate acceptance ratio
-        logLikRatio <- -0.5*(1/prop_params$sigma2)*sum(prop_y_B_u2) -
-          -0.5*(1/params$sigma2)*sum(y_B_u2)
+        logLikRatio <- -0.5*sum(prop_y_B_u2) -
+          -0.5*sum(y_B_u2)
 
         logPriorRatio <- const$prior_tau_theta*rep(1,const$Lq)%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]) -
           const$prior_tau_theta*rep(1,const$Lq)%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])
@@ -379,7 +380,7 @@ update_thetastar_MH_beta <- function(params, const){
   return(params)
 }
 
-
+##
 update_alpha <- function(params,const){
 
 
@@ -398,7 +399,7 @@ update_alpha <- function(params,const){
   return(params) ## alpha_beta then alpha_theta
 }
 
-
+##
 update_logrho <- function(params,const){
 
   ## proposal
@@ -421,6 +422,7 @@ update_logrho <- function(params,const){
 
   return(params)
 }
+
 
 ## smoothness penalty on beta
 update_lambda_beta <- function(params,const){
@@ -447,6 +449,7 @@ update_lambda_beta <- function(params,const){
   return(params)
 }
 
+##
 update_loglambda_theta <- function(params,const){
 
   ## proposal
@@ -484,6 +487,19 @@ update_loglambda_theta <- function(params,const){
   return(params)
 }
 
+##
+# update_u <- function(params,const){
+#
+#   ## first compute B times the corresponding beta for all obs
+#   sumB_beta <- apply(get_B_beta(params,const),1,sum)
+#
+#   for(ii in 1:const$n){## loop over all subjects
+#      params$u[ii] <- rnorm(1,
+#                           mean=(params$sigma2_u/(params$sigma2+const$K*params$sigma2_u))*sum((const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
+#                           sd=sqrt(params$sigma2_u*params$sigma2/(params$sigma2+const$K*params$sigma2_u))  )
+#   }
+#   return(params)
+# }
 
 update_u <- function(params,const){
 
@@ -491,23 +507,53 @@ update_u <- function(params,const){
   sumB_beta <- apply(get_B_beta(params,const),1,sum)
 
   for(ii in 1:const$n){## loop over all subjects
-     params$u[ii] <- rnorm(1,
-                          mean=(params$sigma2_u/(params$sigma2+const$K*params$sigma2_u))*sum((const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
-                          sd=sqrt(params$sigma2_u*params$sigma2/(params$sigma2+const$K*params$sigma2_u))  )
+    params$u[ii] <- rnorm(1,
+                          mean=(1/(1+sum((params$xi^2))))*sum((params$xi*sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
+                          sd=sqrt(1/(1+sum((params$xi^2))))  )
   }
   return(params)
 }
 
+## update xi via MH
+update_xi <- function(params,const){
 
-update_sigma2_u <- function(params,const){
+  ## first compute B times the corresponding beta for all obs
+  sumB_beta <- apply(get_B_beta(params,const),1,sum)
 
-  params$sigma2_u <- 1/rgamma(1,
-                            shape=const$prior_sigma2_u[1]+0.5*const$n,
-                            rate=const$prior_sigma2_u[2]+0.5*sum(params$u^2) )
+  ## random walk proposal (on log scale)
+  prop_params <- params
+  prop_params$xi <- exp(log(params$xi)+rnorm(1,0,const$stepsize_logxi))
+
+  ## compute log-acceptance ratio
+  logLikRatio <-  (-0.5*sum(sapply(1:const$K,function(kk) {(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2)})))   - # prop
+    (-0.5*sum(sapply(1:const$K,function(kk) {(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u)^2)})))    ## current
+
+  logPriorRatio <- ((-const$prior_xi[1]-1)*log(prop_params$xi) -(const$prior_xi[2]/prop_params$xi))- # log of inverse gamma density for proposal
+    ((-const$prior_xi[1]-1)*log(params$xi) -(const$prior_xi[2]/params$xi))+  # log of inverse gamma density for current
+    log(prop_params$xi)-log(params$xi) ## from change of variable
+
+  logRatio <- logLikRatio+logPriorRatio-0
+  if(log(runif(1,0,1)) < logRatio){ ## accept
+    params <- prop_params
+  }
+
   return(params)
 }
 
 
+## old version
+# update_sigma2_u <- function(params,const){
+#
+#   params$sigma2_u <- 1/rgamma(1,
+#                             shape=const$prior_sigma2_u[1]+0.5*const$n,
+#                             rate=const$prior_sigma2_u[2]+0.5*sum(params$u^2) )
+#   return(params)
+# }
+
+
+
+
+##  single variance component from conjugate when K=1
 update_sigma2 <- function(params,const){
 
   ## first compute B times the corresponding beta for all obs
@@ -520,6 +566,36 @@ update_sigma2 <- function(params,const){
   return(params)
 }
 
+
+## update variances via MH when K>1
+update_sigma2_k <- function(params,const){
+
+  ## first compute B times the corresponding beta for all obs
+  sumB_beta <- apply(get_B_beta(params,const),1,sum)
+
+  for(kk in 1:const$K){## loop over all outcomes
+
+    ## random walk proposal (on log scale)
+    prop_params <- params
+    prop_params$sigma2[kk] <- exp(log(params$sigma2[kk])+rnorm(1,0,const$stepsize_logsigma2))
+
+    ## compute log-acceptance ratio
+    logLikRatio <-  (-0.5*const$n*log(prop_params$sigma2[kk])-0.5*(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2))   - # prop
+      (-0.5*const$n*log(params$sigma2[kk])-0.5*(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u)^2))    ## current
+
+    logPriorRatio <- ((-const$prior_sigma2[1]-1)*log(prop_params$sigma2[kk]) -(const$prior_sigma2[2]/prop_params$sigma2[kk]))- # log of inverse gamma density for proposal
+      ((-const$prior_sigma2[1]-1)*log(params$sigma2[kk]) -(const$prior_sigma2[2]/params$sigma2[kk]))+  # log of inverse gamma density for current
+       log(prop_params$sigma2[kk])-log(params$sigma2[kk]) ## from change of variable
+
+    logRatio <- logLikRatio+logPriorRatio-0
+    if(log(runif(1,0,1)) < logRatio){ ## accept
+      params <- prop_params
+    }
+
+  }
+
+  return(params)
+}
 
 
 

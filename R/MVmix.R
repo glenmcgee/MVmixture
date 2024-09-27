@@ -33,7 +33,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_tau_theta=1,
                   prior_lambda_beta=c(1,1),
                   prior_lambda_theta=c(1,0.0001),
-                  prior_sigma2_u=c(0.01,0.01),
+                  # prior_sigma2_u=c(0.01,0.01),
+                  prior_xi=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
                   prior_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
                   sharedlambda=TRUE,
@@ -46,6 +47,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                   ## MH tuning
                   stepsize_logrho=1, ## sd for random walk
                   stepsize_loglambda_theta=1, ## sd for random walk
+                  stepsize_logxi=1,
+                  stepsize_logsigma2=1,
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
@@ -72,7 +75,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                             prior_tau_theta,
                             prior_lambda_beta,
                             prior_lambda_theta,
-                            prior_sigma2_u,
+                            # prior_sigma2_u,
+                            prior_xi,
                             prior_sigma2,
                             prior_phi_a,
                             sharedlambda,
@@ -85,6 +89,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                             ## MH tuning
                             stepsize_logrho,
                             stepsize_loglambda_theta,
+                            stepsize_logxi,
+                            stepsize_logsigma2,
                             Vgridsearch,
                             gridsize,
                             rfbtries,
@@ -115,8 +121,9 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_lambda_beta <- matrix(0,ncol=const$Cbeta,nrow=nkeep)
     keep_loglambda_theta <- matrix(0,ncol=1,nrow=nkeep)
     keep_u <- matrix(0,ncol=const$n,nrow=nkeep)
-    keep_sigma2_u <- matrix(0,ncol=1,nrow=nkeep)
-    keep_sigma2 <- matrix(0,ncol=1,nrow=nkeep)
+    # keep_sigma2_u <- matrix(0,ncol=1,nrow=nkeep)
+    keep_xi <- matrix(0,ncol=1,nrow=nkeep)
+    keep_sigma2 <- matrix(0,ncol=const$K,nrow=nkeep)
     keep_b0 <- matrix(0,ncol=const$K,nrow=nkeep)
 
     ## MCMC
@@ -141,11 +148,13 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_lambda_beta[skeep,] <- params_ss$lambda_beta
         keep_loglambda_theta[skeep,] <- params_ss$loglambda_theta
         keep_u[skeep,] <- params_ss$u
-        keep_sigma2_u[skeep,] <- params_ss$sigma2_u
+        # keep_sigma2_u[skeep,] <- params_ss$sigma2_u
+        keep_xi[skeep,] <- params_ss$xi
         keep_sigma2[skeep,] <- params_ss$sigma2
         keep_b0[skeep,] <- params_ss$b0
 
       }
+
     }
 
     return(list(Zbeta=keep_Zbeta,
@@ -160,7 +169,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                 lambda_beta=keep_lambda_beta,
                 loglambda_theta=keep_loglambda_theta,
                 u=keep_u,
-                sigma2_u=keep_sigma2_u,
+                # sigma2_u=keep_sigma2_u,
+                xi=keep_xi,
                 sigma2=keep_sigma2,
                 b0=keep_b0,
                 const=const) )

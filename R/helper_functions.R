@@ -123,16 +123,16 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
       lapply(whichkj[[kk]],function(jj){
         c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]]
         })
-      )
+      )/sqrt(params$sigma2[kk])
     })
 
   yhat_k <- lapply(whichk,function(kk){
-    const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$u+
+    (const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u+
       Reduce("+",
              lapply(whichkj[[kk]],function(jj){
                (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
              })
-       )
+       ))/sqrt(params$sigma2[kk])
   })
 
   return(list(XTX=Reduce("+",lapply(Xhat_k,function(XX){t(XX)%*%XX})),
@@ -277,7 +277,8 @@ initialize_const <- function(Y, ## response
                              prior_tau_theta,
                              prior_lambda_beta,
                              prior_lambda_theta,
-                             prior_sigma2_u,
+                             # prior_sigma2_u,
+                             prior_xi,
                              prior_sigma2,
                              prior_phi_a,
                              sharedlambda,
@@ -290,6 +291,8 @@ initialize_const <- function(Y, ## response
                              ## MH tuning
                              stepsize_logrho,
                              stepsize_loglambda_theta,
+                             stepsize_logxi,
+                             stepsize_logsigma2,
                              Vgridsearch,
                              gridsize,
                              rfbtries,
@@ -319,7 +322,8 @@ initialize_const <- function(Y, ## response
                 prior_tau_theta=prior_tau_theta,
                 prior_lambda_beta=prior_lambda_beta,
                 prior_lambda_theta=prior_lambda_theta,
-                prior_sigma2_u=prior_sigma2_u,
+                # prior_sigma2_u=prior_sigma2_u,
+                prior_xi=prior_xi,
                 prior_sigma2=prior_sigma2,
                 prior_phi_a=prior_phi_a,
                 sharedlambda=sharedlambda,
@@ -332,6 +336,8 @@ initialize_const <- function(Y, ## response
                 ## MH tuning
                 stepsize_logrho=stepsize_logrho,
                 stepsize_loglambda_theta=stepsize_loglambda_theta,
+                stepsize_logxi=stepsize_logxi,
+                stepsize_logsigma2=stepsize_logsigma2,
                 Vgridsearch=Vgridsearch,
                 gridsize=gridsize,
                 rfbtries=rfbtries,
@@ -562,15 +568,20 @@ get_starting_vals <- function(const){
   }
 
   # params$sigma2 <- 1/rgamma(1,shape=const$prior_sigma2[1],rate=const$prior_sigma2[2])
-  params$sigma2 <- 1/rgamma(1,shape=10,rate=10)
+  # params$sigma2 <- 1/rgamma(1,shape=10,rate=10)
+  params$sigma2 <- 1/rgamma(const$K,shape=5,rate=1)
 
   #
   if(const$K>1){
-    params$sigma2_u <- 1/rgamma(1,shape=10,rate=10)
+    # params$sigma2_u <- 1/rgamma(1,shape=10,rate=10)
+    # params$u <- rnorm(const$n,0,sqrt(params$sigma2_u))
+    params$xi <- 1/rgamma(1,shape=10,rate=1)
+    params$u <- rnorm(const$n,0,1)
 
-    params$u <- rnorm(const$n,0,sqrt(params$sigma2_u))
+
   }else{
-    params$sigma2_u <- 0
+    # params$sigma2_u <- 0
+    params$xi <- 0
     params$u <- rep(0,const$n)
   }
 
