@@ -215,6 +215,7 @@ update_betastar <- function(params,const){
 
       ## compute Vmat only once ## summing over all k in cluster cc
       Vmat <- solve(lambda_beta*const$invSig0+BTB)
+      Vmat <- (Vmat+t(Vmat))/2
 
       params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
                                                              mean=Vmat%*%t(lambda_beta*t(const$mu0)%*%const$invSig0+yTB  ),
