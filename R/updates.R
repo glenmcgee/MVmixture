@@ -4,18 +4,23 @@
 ##
 update_clustMemb <- function(params,const){
 
-  ## used for the components that are not being summed over
-  B_beta <- get_B_beta(params,const)
+  ## EDIT: should be changing with Z?
+  # ## used for the components that are not being summed over
+  # B_beta <- get_B_beta(params,const)
+  params$err <- 0 ## for error tracking
 
   for(kk in 1:const$K){## loop over outcomes
     for(jj in 1:const$p){## loop over exposures
 
-      ## components that get re-used repeatedly
-      y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[const$k_index==kk,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u)
-      Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
 
       ## Zbetakj ##
       if(const$clustering=="both" | const$clustering=="beta"){
+
+        ## necessary components
+        B_beta <- get_B_beta_k(params,const,kk)
+        y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
+        Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
+
 
         ## compute probabilities for all possible a
         probs <- c(sapply(1:const$Cbeta, function(a){  ## loop over a (rows; beta clusters)
@@ -23,21 +28,54 @@ update_clustMemb <- function(params,const){
         })) ## to be standardized below
 
         ## sample 1 of C with correct probabilities
-        tryCatch({params$Zbeta[kk,jj] <- sample(1:const$Cbeta,1,prob=probs/sum(probs))}, ## standardized probs
-                 error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
+
+
+        newZbeta <- tryCatch(sample(1:const$Cbeta,1,prob=probs/sum(probs)), ## standardized probs
+                 error=function(err){NULL})
+
+        if(!is.null(newZbeta)){
+          params$Zbeta[kk,jj] <- newZbeta
+        }else{## track errors
+          params$err <- 1
+        }
+
       }
 
 
       ## Zthetakj ##
       if(const$clustering=="both" | const$clustering=="theta"){
+
+
         ## compute probabilities for all possible b
-        probs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
-          exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
-        }))## to be standardized below
+        if(const$MIM==TRUE){ ## changing Ztheta may change IDmat
+          y_u <- const$y[const$k_index==kk]-params$b0[kk]-(params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
+          newZtheta <- params$Ztheta
+          probs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
+            newZtheta[kk,jj] <- b
+            exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,const,kk,newZtheta),1,sum))^2))
+          }))## to be standardized below
+
+        }else{ ## dont need to worry about ID mat
+          ## now have changed
+          B_beta <- get_B_beta_k(params,const,kk)
+          y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
+
+          probs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
+            exp(log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
+          }))## to be standardized below
+        }
+
 
         ## sample 1 of C with correct probabilities
-        tryCatch({params$Ztheta[kk,jj] <- sample(1:const$Ctheta,1,prob=probs/sum(probs))},
-                 error=function(err){print(paste0("Skipping cluster member update for (k,j)=",kk,",",jj))})
+        newZtheta <- tryCatch(sample(1:const$Ctheta,1,prob=probs/sum(probs)),
+                 error=function(err){NULL})
+
+        if(!is.null(newZtheta)){
+          params$Ztheta[kk,jj] <- newZtheta
+        }else{## track errors
+          params$err <- 1
+        }
+
       }
 
     }
@@ -141,15 +179,32 @@ update_intercept <- function(params,const){
 
   for(kk in 1:const$K){
     params$b0[kk] <- rnorm(1,
-                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u))/(const$n),
+                       mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]))/(const$n),
                        sd=sqrt(params$sigma2[kk]/(const$n)))
   }
 
   return(params)
 }
 
+
+
+update_betaZk <- function(params,const){
+
+  ZTZinv <- solve(t(const$Zcovariates)%*%const$Zcovariates)
+
+  for(kk in 1:const$K){
+    params$betaZk[kk,] <- mvtnorm::rmvnorm(1,
+                           mean=ZTZinv%*%t(const$Zcovariates)%*%(const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u),
+                           sigma=params$sigma2[kk]*ZTZinv)
+  }
+
+  return(params)
+}
+
+
 ##
 update_betastar <- function(params,const){
+
   ## computing only once
   Btheta <- lapply(1:const$p,function(jj){
     Reduce("rbind",lapply(1:const$K,function(kk){
@@ -160,8 +215,10 @@ update_betastar <- function(params,const){
   if(const$MIM==TRUE){ ## for identifiability product in MIM
     IDprodmat <- matrix(1,nrow=const$K,ncol=const$p)
     for(kk in 1:const$K){
-      for(jj in 2:const$p){
-        IDprodmat[kk,jj] <- prod(params$Ztheta[kk,1:(jj-1)]!=params$Ztheta[kk,jj])
+      if(const$p>1){
+        for(jj in 2:const$p){
+          IDprodmat[kk,jj] <- prod(params$Ztheta[kk,1:(jj-1)]!=params$Ztheta[kk,jj])
+        }
       }
     }
   }
@@ -199,7 +256,7 @@ update_betastar <- function(params,const){
 
       ##
       y_u_B_k <- lapply(whichk,function(kk){
-          y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$xi*sqrt(params$sigma2[kk])*params$u
+          y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]
             if(length(whichkNotj[[kk]])>0){
               y_u <- y_u - Reduce("+",lapply(whichkNotj[[kk]],function(jj){
                 Btheta[[jj]][const$k_index==kk,]%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
@@ -214,6 +271,8 @@ update_betastar <- function(params,const){
       }))
 
       ## compute Vmat only once ## summing over all k in cluster cc
+      # print(lambda_beta)
+      # print(BTB)
       Vmat <- solve(lambda_beta*const$invSig0+BTB)
       Vmat <- (Vmat+t(Vmat))/2
 
@@ -339,8 +398,8 @@ update_thetastar_MH_beta <- function(params, const){
         # }
 
         ## components of likelihood
-        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2)/prop_params$sigma2[kk]})
-        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u)^2)/params$sigma2[kk]})
+        prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2)/prop_params$sigma2[kk]})
+        y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,])^2)/params$sigma2[kk]})
 
         ## calculate acceptance ratio
         logLikRatio <- -0.5*sum(prop_y_B_u2) -
@@ -509,7 +568,7 @@ update_u <- function(params,const){
 
   for(ii in 1:const$n){## loop over all subjects
     params$u[ii] <- rnorm(1,
-                          mean=(1/(1+sum((params$xi^2))))*sum((params$xi*sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
+                          mean=(1/(1+sum((params$xi^2))))*sum((params$xi*sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii]-t(const$Zcovariates[ii,]%*%t(params$betaZk)))),
                           sd=sqrt(1/(1+sum((params$xi^2))))  )
   }
   return(params)
@@ -526,8 +585,8 @@ update_xi <- function(params,const){
   prop_params$xi <- exp(log(params$xi)+rnorm(1,0,const$stepsize_logxi))
 
   ## compute log-acceptance ratio
-  logLikRatio <-  (-0.5*sum(sapply(1:const$K,function(kk) {(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2)})))   - # prop
-    (-0.5*sum(sapply(1:const$K,function(kk) {(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u)^2)})))    ## current
+  logLikRatio <-  (-0.5*sum(sapply(1:const$K,function(kk) {(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2)})))   - # prop
+    (-0.5*sum(sapply(1:const$K,function(kk) {(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,])^2)})))    ## current
 
   logPriorRatio <- ((-const$prior_xi[1]-1)*log(prop_params$xi) -(const$prior_xi[2]/prop_params$xi))- # log of inverse gamma density for proposal
     ((-const$prior_xi[1]-1)*log(params$xi) -(const$prior_xi[2]/params$xi))+  # log of inverse gamma density for current
@@ -562,7 +621,7 @@ update_sigma2 <- function(params,const){
 
   params$sigma2 <- 1/rgamma(1,
                             shape=const$prior_sigma2[1]+0.5*const$n*const$K,
-                            rate=const$prior_sigma2[2]+0.5*(sum((const$y-(rep(params$b0,each=const$n)+sumB_beta+rep(params$u,const$K)))^2)) )
+                            rate=const$prior_sigma2[2]+0.5*(sum((const$y-(rep(params$b0,each=const$n)+sumB_beta+rep(params$u,const$K)+const$Zcovariates%*%params$betaZk[1,]))^2)) )
 
   return(params)
 }
@@ -581,8 +640,8 @@ update_sigma2_k <- function(params,const){
     prop_params$sigma2[kk] <- exp(log(params$sigma2[kk])+rnorm(1,0,const$stepsize_logsigma2))
 
     ## compute log-acceptance ratio
-    logLikRatio <-  (-0.5*const$n*log(prop_params$sigma2[kk])-0.5*(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u)^2))   - # prop
-      (-0.5*const$n*log(params$sigma2[kk])-0.5*(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u)^2))    ## current
+    logLikRatio <-  (-0.5*const$n*log(prop_params$sigma2[kk])-0.5*(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2))   - # prop
+      (-0.5*const$n*log(params$sigma2[kk])-0.5*(1/params$sigma2[kk])*sum((const$y[const$k_index==kk]-params$b0[kk]-sumB_beta[const$k_index==kk]-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,])^2))    ## current
 
     logPriorRatio <- ((-const$prior_sigma2[1]-1)*log(prop_params$sigma2[kk]) -(const$prior_sigma2[2]/prop_params$sigma2[kk]))- # log of inverse gamma density for proposal
       ((-const$prior_sigma2[1]-1)*log(params$sigma2[kk]) -(const$prior_sigma2[2]/params$sigma2[kk]))+  # log of inverse gamma density for current

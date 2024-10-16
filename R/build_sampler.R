@@ -20,7 +20,9 @@ build_sampler <- function(const){
     params <- update_xi(params,const)
     params <- update_sigma2_k(params,const)
     params <- update_intercept(params,const)
-
+    params <- update_betaZk(params,const) ## linear confounder coefficients
+    # print(rbind(params$Zbeta,params$Ztheta))
+    # print(params$lambda_beta)
     return(params)
   }
 
@@ -41,6 +43,14 @@ build_sampler <- function(const){
     for(ll in 2:(length(body(update_params))-1)){ ## use conjugate
       if(any(grepl( "update_sigma2_k", as.character(body(update_params)[[ll]]), fixed = TRUE))){
         body(update_params)[[ll]] <- substitute(params <- update_sigma2(params, const))
+      }
+    }
+  }
+
+  if(is.null(const$Z)){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_betaZk", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
       }
     }
   }

@@ -39,15 +39,10 @@ get_Btheta <- function(Xomega,const,params=NULL,k,j){
       IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
     }
     return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
-  # }else{ ## standard version
-  #   # if(ncol(as.matrix(Xomega))>1){ ## old version allowed for a matrix of Xomega--DONT THINK WE USE IT ANYMORE BUT WILL CHECK
-  #   #   return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SS,data=data.frame(Xomega[,jj]))}))
-  #   # }else{
-  #     return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
-  #   # }
-  # }
+
 
 }
+
 
 ## get derivatives of Basis functions
 get_DerivBtheta <- function(Xomega,const,params,k,j){
@@ -94,6 +89,26 @@ get_DerivB_beta <- function(params,const,kk,jj){
 }
 
 
+## alternate version for updating Ztheta=b in update_clustMemb
+get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
+  # if(const$MIM==TRUE){
+  if(const$MIM==FALSE | j==1 ){
+    IDprod <- 1
+  }else{  ## identifiability product for MIM
+    IDprod <- prod(Ztheta[k,1:(j-1)]!=Ztheta[k,j])
+  }
+  return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+}
+## alternate version for updating Ztheta=b in update_clustMemb
+get_B_beta_k_b <- function(params,const,kk,Ztheta){
+
+  return(sapply(1:const$p,function(jj){
+    get_Btheta_b(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,Ztheta,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+  }))
+
+}
+
+
 
 ## computes density of V_c ## up to proportionality constant
 ## called iteratively by update_V and update_V_MH
@@ -127,7 +142,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
     })
 
   yhat_k <- lapply(whichk,function(kk){
-    (const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u+
+    (const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]+
       Reduce("+",
              lapply(whichkj[[kk]],function(jj){
                (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
@@ -354,6 +369,13 @@ initialize_const <- function(Y, ## response
   const$n <- nrow(const$X[[1]])
   const$K <- ncol(Y)
   const$L <- ncol(const$X[[1]])
+  if(is.null(const$Z)){
+    const$Zcovariates <- matrix(0,ncol=1,nrow=const$n)
+    const$pz <- 1
+  }else{
+    const$Zcovariates <- as.matrix(const$Z)
+    const$pz <- ncol(const$Z)
+  }
   if(is.null(maxClusters)){
     const$C <- const$K ## default number of clusters
   }else{
@@ -613,10 +635,24 @@ get_starting_vals <- function(const){
   ## betastar
   params$betastar <- c(t(rmvnorm(const$Cbeta,const$mu0,diag(const$d))))
 
-  # intercept
+  ## intercepts
   params$b0 <- rnorm(const$K)
 
+  # linear coefficients
+  if(is.null(const$Z)){
+    params$betaZk <- matrix(0,ncol=1,nrow=const$K)
+  }else{
+    # matrix(rnorm(const$pz*const$K),ncol=const$pz,nrow=const$K)
+    # alternatively could just start with LS:
+    ZZ <- cbind(1,const$Zcovariates)
+    LS <- t(solve(t(ZZ)%*%ZZ)%*%t(ZZ)%*%matrix(const$y,ncol=const$K))
+    params$b0 <- c(LS[,1])
+    params$betaZk <- LS[,-1,drop=F]#t(solve(t(const$Zcovariates)%*%const$Zcovariates)%*%t(const$Zcovariates)%*%const$Y)    #matrix(rnorm(const$pz*const$K),ncol=const$pz,nrow=const$K)
+  }
 
+
+
+  params$err <- 0
   return(params)
 }
 

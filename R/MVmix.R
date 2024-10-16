@@ -125,12 +125,17 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_xi <- matrix(0,ncol=1,nrow=nkeep)
     keep_sigma2 <- matrix(0,ncol=const$K,nrow=nkeep)
     keep_b0 <- matrix(0,ncol=const$K,nrow=nkeep)
+    keep_betaZk <- matrix(0,ncol=const$K*const$pz,nrow=nkeep)
 
     ## MCMC
+    maxerr <- 0 ## tracking errors
     for(ss in 1:niter){
 
       ## update parameters
       params_ss <- update_params(params_ss)
+      if(params_ss$err==1){
+        maxerr <- ss ## max iteration with clustering error
+      }
 
       ## retain samples after burn-in and thinning
       if(ss>nburn & (ss-nburn)%%nthin==0){
@@ -152,12 +157,13 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_xi[skeep,] <- params_ss$xi
         keep_sigma2[skeep,] <- params_ss$sigma2
         keep_b0[skeep,] <- params_ss$b0
+        keep_betaZk[skeep,] <- c(t(params_ss$betaZk)) #(each row for each k)
 
       }
 
     }
 
-    return(list(Zbeta=keep_Zbeta,
+    res <- list(Zbeta=keep_Zbeta,
                 Ztheta=keep_Ztheta,
                 Vbeta=keep_Vbeta,
                 Vtheta=keep_Vtheta,
@@ -173,13 +179,17 @@ MVmix <- function(Y, ## n x K matrix of responses
                 xi=keep_xi,
                 sigma2=keep_sigma2,
                 b0=keep_b0,
-                const=const) )
+                betaZk=keep_betaZk,
+                const=const)
+    attr(res,"err") <- maxerr
+    return(res)
   }
 
 
   ## run chains
   if(nchains==1){ ## run single chain
     samples <- run_sampler()
+    maxerr <- attr(samples,"err")
     # samples$PSR <- NULL
   }else{ ## run multiple chains
     if(ncores==1){ ## run multiple chains (not parallel)
@@ -191,11 +201,16 @@ MVmix <- function(Y, ## n x K matrix of responses
       chains <- mclapply(1:nchains,run_sampler,mc.cosamples=ncores)
     }
 
+
     ## append chains
     samples <- chains[[1]] ## use first for names/formatting
-    samples <- lapply(names(samples), ## looping over names of variables to append
+    samples <- lapply(names(samples)[!(names(samples)%in%"const")], ## looping over names of variables to append
                   function(v){ Reduce('rbind',lapply(chains,function(chn) chn[[v]]))} )## for each variable name, extract element from each chain, then collapse them via rbind
 
+    samples$const <- chains[[1]]$const
+    names(samples) <- names(chains[[1]])
+    ## errs
+    maxerr <- sapply(chains,function(x)attr(x,"err"))
 
     # ## compute PSR
     # samples$PSR <- vector(mode = "list", length = length(names(samples)))
@@ -249,6 +264,9 @@ MVmix <- function(Y, ## n x K matrix of responses
       }))
     })
   })
+
+  ## track errors
+  samples$maxerr <- paste0(round(100*maxerr/niter),"%")
 
   return(samples)
 }

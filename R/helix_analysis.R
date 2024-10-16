@@ -60,11 +60,29 @@ MIM <- MVmix(as.matrix(Y),Reduce("cbind",exposure_list),Z=z,
                 MIM=TRUE,MIMorder=4,
                 cluster="both",maxClusters=12,sharedlambda = FALSE,
                 DLM=FALSE,approx=TRUE)
+save(MIM, file = "helix_MIM.RData")
+
+pred_MIM <- predict_MVmix(MIM,
+                          newX = Reduce("cbind",exposure_list),
+                          newZ = z,
+                          include_intercept=TRUE,
+                          allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_MIM$summary[[jj]]$mean~Y[,jj])
+  abline(0,1,col="red")
+  })
+sapply(1:3,function(jj) cor(pred_MIM$summary[[jj]]$mean,Y[,jj]))
+sapply(1:3,function(jj) lm(pred_MIM$summary[[jj]]$mean~Y[,jj])$coef)
+
+boxplot(MIM$sigma2)
+
+pc <- pairwise_clusters(MIM)
+make_heatplot(pc$beta_y)
+make_heatplot(pc$theta_y)
 
 
-pred_MIM <- predict_MVmix(MIM, newX = Reduce("cbind",exposure_list),  include_intercept=TRUE, allx=TRUE)
 
-plot(pred_MIM$summary[[1]]$mean~Y[,1])
 
 
 MIM$flipomega <- MIM$omega
@@ -101,6 +119,35 @@ cbind(xnames[order(-apply((MIM$omega[[1]][[1]])^2,2,sum))[1:10]],
       xnames[order(-apply((MIM$omega[[4]][[1]])^2,2,sum))[1:10]])
 
 
+
+
+#######################################
+## Fit singleIndex model
+## Different singleIndex per outcome
+## Not clustered
+#######################################
+
+nit <- 10000
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+
+
+singleIndex <- MVmix(as.matrix(Y),list(Reduce("cbind",exposure_list)),Z=z,
+             niter=nit,nburn=nburn,nthin=nthin,
+             Vgridsearch = TRUE,gridsize=10,
+             MIM=FALSE,
+             cluster="neither",maxClusters=3,sharedlambda = FALSE,
+             DLM=FALSE,approx=TRUE)
+
+
+pred_singleIndex <- predict_MVmix(singleIndex, newX = list(Reduce("cbind",exposure_list)),  include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) plot(pred_singleIndex$summary[[jj]]$mean~Y[,jj]))
+sapply(1:3,function(jj) cor(pred_singleIndex$summary[[jj]]$mean,Y[,jj]))
+
+
+boxplot(MIM$sigma2)
 
 
 

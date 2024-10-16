@@ -13,9 +13,11 @@ summarize_pred <- function(pred){
 }
 
 ## when summing all fns, need to add in intercept
-summarize_pred_all <- function(pred,obj,include_intercept){
+summarize_pred_all <- function(pred,obj,include_intercept,newZ){
   summlist <- lapply(1:length(pred),function(kk){
-    pmat <- Reduce("+",pred[[kk]])+as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(obj$const$X[[1]]))
+    pmat <- Reduce("+",pred[[kk]])+
+      as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(obj$const$X[[1]]))+
+      newZ%*%t(obj$betaZk[,(kk-1)*obj$const$pz+(1:obj$const$pz)])
     return(data.frame(mean=apply(pmat,1,mean),
                       lower=apply(pmat,1,function(x)quantile(x,0.025)),
                       upper=apply(pmat,1,function(x)quantile(x,0.975)) ))
@@ -27,6 +29,7 @@ summarize_pred_all <- function(pred,obj,include_intercept){
 ## function for estimating fitted/predicted values
 predict_MVmix <- function(obj,
                           newX=NULL,
+                          newZ=NULL, ## if null, dont include covariate effects
                           fixomega=FALSE,
                           fixomegaval=NULL,
                           include_intercept=TRUE,
@@ -45,6 +48,10 @@ predict_MVmix <- function(obj,
   }
   if(!is.list(newX)){
     newX <- rep(list(newX), obj$const$p)
+  }
+
+  if(is.null(newZ)){
+    newZ <- 0*obj$const$Zcovariates
   }
 
   RR <- nrow(as.matrix(obj$sigma2))
@@ -90,7 +97,7 @@ predict_MVmix <- function(obj,
   }
 
   if(allx==TRUE){
-    summpred <- summarize_pred_all(pred,obj,include_intercept)
+    summpred <- summarize_pred_all(pred,obj,include_intercept,newZ)
   }else{
     summpred <- summarize_pred(pred)
   }
