@@ -44,36 +44,46 @@ Y <- scale(cbind(phenotype$hs_zbmi_who,     ## BMI
                  phenotype$hs_correct_raven,## IQ
                  phenotype$hs_Gen_Tot))     ## neuro behaviour
 
+#################
+## train/test ###
+#################
+set.seed(0)
+ntrain <- 800
+trainids <- sort(sample(N,ntrain))
+testids <- (1:N)[-trainids]
+
 #######################################
 ## Fit MIM
 #######################################
 
-nit <- 10000
+nit <- 30000
 nburn <- 0.5*nit
 nthin = 5
 set.seed(0)
 
 
-MIM <- MVmix(as.matrix(Y),Reduce("cbind",exposure_list),Z=z,
+MIM <- MVmix(as.matrix(as.matrix(Y)[trainids,]),Reduce("cbind",exposure_list)[trainids,],Z=z[trainids,],
                 niter=nit,nburn=nburn,nthin=nthin,
                 Vgridsearch = TRUE,gridsize=10,
                 MIM=TRUE,MIMorder=4,
                 cluster="both",maxClusters=12,sharedlambda = FALSE,
-                DLM=FALSE,approx=TRUE)
+                DLM=FALSE,approx=TRUE,
+                prior_alpha_beta = c(1,5), ## encouraging clustering
+                prior_alpha_theta = c(1,5))
 save(MIM, file = "helix_MIM.RData")
 
 pred_MIM <- predict_MVmix(MIM,
-                          newX = Reduce("cbind",exposure_list),
-                          newZ = z,
+                          newX = Reduce("cbind",exposure_list)[testids,],
+                          newZ = z[testids,],
                           include_intercept=TRUE,
                           allx=TRUE)
 
 lapply(1:3,function(jj) {
-  plot(pred_MIM$summary[[jj]]$mean~Y[,jj])
+  plot(pred_MIM$summary[[jj]]$mean~Y[testids,jj])
   abline(0,1,col="red")
   })
-sapply(1:3,function(jj) cor(pred_MIM$summary[[jj]]$mean,Y[,jj]))
-sapply(1:3,function(jj) lm(pred_MIM$summary[[jj]]$mean~Y[,jj])$coef)
+sapply(1:3,function(jj) cor(pred_MIM$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_MIM$summary[[jj]]$mean~Y[testids,jj])$coef)
 
 boxplot(MIM$sigma2)
 
@@ -139,16 +149,186 @@ singleIndex <- MVmix(as.matrix(Y),list(Reduce("cbind",exposure_list)),Z=z,
              MIM=FALSE,
              cluster="neither",maxClusters=3,sharedlambda = FALSE,
              DLM=FALSE,approx=TRUE)
+save(singleIndex, file = "helix_singleIndex.RData")
 
+pred_singleIndex <- predict_MVmix(singleIndex,
+                                  newX = list(Reduce("cbind",exposure_list)),
+                                  newZ = z,
+                                  include_intercept=TRUE, allx=TRUE)
 
-pred_singleIndex <- predict_MVmix(singleIndex, newX = list(Reduce("cbind",exposure_list)),  include_intercept=TRUE, allx=TRUE)
-
-lapply(1:3,function(jj) plot(pred_singleIndex$summary[[jj]]$mean~Y[,jj]))
+lapply(1:3,function(jj) {
+  plot(pred_singleIndex$summary[[jj]]$mean~Y[,jj])
+  abline(0,1,col="red")
+})
 sapply(1:3,function(jj) cor(pred_singleIndex$summary[[jj]]$mean,Y[,jj]))
+sapply(1:3,function(jj) lm(pred_singleIndex$summary[[jj]]$mean~Y[,jj])$coef)
 
 
-boxplot(MIM$sigma2)
+boxplot(singleIndex$sigma2)
 
+
+
+
+#######################################
+## Fit singleIndex model
+## With clustering
+#######################################
+
+nit <- 10000
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+
+
+singleIndexClust <- MVmix(as.matrix(as.matrix(Y)[trainids,1:2]),list(Reduce("cbind",exposure_list)[trainids,]),Z=z[trainids,],
+                     niter=nit,nburn=nburn,nthin=nthin,
+                     Vgridsearch = TRUE,gridsize=10,
+                     MIM=FALSE,
+                     cluster="both",maxClusters=3,sharedlambda = FALSE,
+                     DLM=FALSE,approx=TRUE)
+save(singleIndexClust, file = "helix_singleIndexClust.RData")
+
+pred_singleIndexClust <- predict_MVmix(singleIndexClust,
+                                  newX = list(Reduce("cbind",exposure_list)[testids,]),
+                                  newZ = z[testids,],
+                                  include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_singleIndexClust$summary[[jj]]$mean~Y[testids,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_singleIndexClust$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_singleIndexClust$summary[[jj]]$mean~Y[testids,jj])$coef)
+
+
+boxplot(singleIndexClust$sigma2)
+
+pc_singleIndexClust <- pairwise_clusters(singleIndexClust)
+make_heatplot(pc_singleIndexClust$beta_y)
+make_heatplot(pc_singleIndexClust$theta_y)
+
+
+#######################################
+## Fit twoIndex (MIM2) model
+## With clustering
+#######################################
+
+nit <- 4000 ## worked with one outcome pretty well! try with multiple
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+
+
+MIM2 <- MVmix(as.matrix(Y)[trainids,1:2],Reduce("cbind",exposure_list)[trainids,],Z=z[trainids,],
+                          niter=nit,nburn=nburn,nthin=nthin,
+                          Vgridsearch = TRUE,gridsize=10,
+                          MIM=TRUE,MIMorder = 2,
+                          cluster="both",maxClusters=4,sharedlambda = FALSE,
+                          DLM=FALSE,approx=TRUE,
+                          prior_alpha_beta = c(1,5), ## encouraging clustering
+                          prior_alpha_theta = c(1,5))
+save(MIM2, file = "helix_MIM2.RData")
+
+pred_MIM2 <- predict_MVmix(MIM2,
+                          newX = Reduce("cbind",exposure_list)[testids,],
+                          newZ = z[testids,],
+                          include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_MIM2$summary[[jj]]$mean~Y[testids,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_MIM2$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_MIM2$summary[[jj]]$mean~Y[testids,jj])$coef)
+
+
+boxplot(MIM2$sigma2)
+
+pc_MIM2 <- pairwise_clusters(MIM2)
+make_heatplot(pc_MIM2$beta_y)
+make_heatplot(pc_MIM2$theta_y)
+
+
+#######################################
+## Fit twoIndex model
+## No clustering
+#######################################
+
+nit <- 10000
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+
+
+twoIndex <- MVmix(as.matrix(Y),list(Reduce("cbind",exposure_list),Reduce("cbind",exposure_list)),Z=z,
+              niter=nit,nburn=nburn,nthin=nthin,
+              Vgridsearch = TRUE,gridsize=10,
+              MIM=FALSE,MIMorder = 2,
+              cluster="neither",maxClusters=6,sharedlambda = FALSE,
+              DLM=FALSE,approx=TRUE)
+save(twoIndex, file = "helix_twoIndex.RData")
+
+pred_twoIndex <- predict_MVmix(twoIndex,
+                           newX = list(Reduce("cbind",exposure_list),Reduce("cbind",exposure_list)),
+                           newZ = z,
+                           include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_twoIndex$summary[[jj]]$mean~Y[,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_twoIndex$summary[[jj]]$mean,Y[,jj]))
+sapply(1:3,function(jj) lm(pred_twoIndex$summary[[jj]]$mean~Y[,jj])$coef)
+
+
+boxplot(twoIndex$sigma2)
+
+pc_twoIndex <- pairwise_clusters(twoIndex)
+make_heatplot(pc_twoIndex$beta_y)
+make_heatplot(pc_twoIndex$theta_y)
+
+
+#######################################
+## Fit twoIndex model
+## HIGH clustering
+#######################################
+
+nit <- 40000
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+N <- nrow(z)
+
+
+
+twoIndexClust <- MVmix(as.matrix(Y)[trainids,],Reduce("cbind",exposure_list)[trainids,],Z=z[trainids,],
+                  niter=nit,nburn=nburn,nthin=nthin,
+                  Vgridsearch = TRUE,gridsize=10,
+                  MIM=TRUE,MIMorder = 2,
+                  cluster="both",maxClusters=6,sharedlambda = FALSE,
+                  DLM=FALSE,approx=TRUE,
+                  prior_alpha_beta = c(1,10), ## encouraging clustering
+                  prior_alpha_theta = c(1,10))
+save(twoIndexClust, file = "helix_twoIndexClust.RData")
+
+pred_twoIndexClust <- predict_MVmix(twoIndexClust,
+                               newX = Reduce("cbind",exposure_list)[testids,],
+                               newZ = z[testids,],
+                               include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_twoIndexClust$summary[[jj]]$mean~Y[testids,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_twoIndexClust$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_twoIndexClust$summary[[jj]]$mean~Y[testids,jj])$coef)
+
+
+boxplot(twoIndexClust$sigma2)
+
+pc_twoIndexClust <- pairwise_clusters(twoIndexClust)
+make_heatplot(pc_twoIndexClust$beta_y)
+make_heatplot(pc_twoIndexClust$theta_y)
 
 
 

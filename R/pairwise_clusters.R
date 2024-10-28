@@ -35,13 +35,16 @@ pairwise_clusters <- function(obj){
 
 library(reshape)
 make_heatplot <- function(heat){
+  heat <- rbind(heat,0) ## add a 0 to have a standard baseline color (removed later)
   heatplot <- ggplot(data = melt(heat), aes(x=X1, y=X2,fill=value)) +
     geom_tile()+
     scale_fill_gradientn(colours = c("white", "coral4"),values = c(0,1))+
     geom_text(aes(X1, X2, label = value),color = "white", size = 4)+
     labs(x="", y="")+
     scale_y_discrete(limits=rev)+
-    scale_x_discrete(position = 'top')+
+    scale_x_discrete(position = 'top',
+                     limits=c(colnames(heat)))+
+                     #limits=c(head(colnames(heat),1),tail(colnames(heat),1)))+
     # guides(x =  guide_axis(angle = 45)) +
     # guides(fill=guide_legend(title="Prob"))+
     guides(fill="none")+

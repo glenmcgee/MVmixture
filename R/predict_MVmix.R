@@ -16,7 +16,7 @@ summarize_pred <- function(pred){
 summarize_pred_all <- function(pred,obj,include_intercept,newZ){
   summlist <- lapply(1:length(pred),function(kk){
     pmat <- Reduce("+",pred[[kk]])+
-      as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(obj$const$X[[1]]))+
+      as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(newZ))+
       newZ%*%t(obj$betaZk[,(kk-1)*obj$const$pz+(1:obj$const$pz)])
     return(data.frame(mean=apply(pmat,1,mean),
                       lower=apply(pmat,1,function(x)quantile(x,0.025)),
