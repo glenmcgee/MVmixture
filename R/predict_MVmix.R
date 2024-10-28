@@ -51,7 +51,7 @@ predict_MVmix <- function(obj,
   }
 
   if(is.null(newZ)){
-    newZ <- 0*obj$const$Zcovariates
+    newZ <- matrix(0,nrow=nrow(newX[[1]]),ncol=ncol(obj$const$Zcovariates))#0*obj$const$Zcovariates
   }
 
   RR <- nrow(as.matrix(obj$sigma2))
