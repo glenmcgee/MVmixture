@@ -1,10 +1,13 @@
 require(randomForest)
 
 ExposureImportance = function(obj, exposures,
-                              nMC = 250) {
+                              nMC = 250,
+                              nSamp=NULL) {
 
   n = dim(obj$u)[2]
-  nSamp = n
+  if(is.null(nSamp)){
+    nSamp = n
+  }
   p <- obj$const$L[[1]]
   K <- obj$const$K
   X <- obj$const$X[[1]]

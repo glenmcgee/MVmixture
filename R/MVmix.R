@@ -12,6 +12,8 @@ source("fb.saddle.R")
 source("updates.R")
 source("build_sampler.R")
 source("predict_MVmix.R")
+source("pairwise_clusters.R")
+source("ExposureImportance.R")
 ##
 MVmix <- function(Y, ## n x K matrix of responses
                   X, ## p-list of n x L matrix of exposures
