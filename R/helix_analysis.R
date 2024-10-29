@@ -26,6 +26,10 @@ if(exp_set=="postnatal"){
 }
 exposure_list <- lapply(exposure_list,scale)
 
+END <- c(cumsum(sapply(exposure_list,ncol)))
+START <- END-c(4,diff(cumsum(sapply(exposure_list,ncol))))+1
+groupIDs <- lapply(1:length(END),function(ll){START[ll]:END[ll]})
+
 
 ################
 ## covariates ##
@@ -33,7 +37,7 @@ exposure_list <- lapply(exposure_list,scale)
 z <- cbind(z_base_preg,z_base_post)
 # remove covariates that are already adjusted for in the outcome or related to the outcome
 z <- z[,-which(colnames(z)%in%c("hs_child_age_None","e3_sex_Nonemale","hs_c_weight_None","hs_c_height_None"))]
-
+N <- nrow(z)
 
 ###############
 ## outcomes ###
@@ -56,7 +60,7 @@ testids <- (1:N)[-trainids]
 ## Fit MIM
 #######################################
 
-nit <- 30000
+nit <- 5000
 nburn <- 0.5*nit
 nthin = 5
 set.seed(0)
@@ -92,7 +96,8 @@ make_heatplot(pc$beta_y)
 make_heatplot(pc$theta_y)
 
 
-
+## VIMs
+VIMs = lapply(groupIDs,function(groupID) ExposureImportance(obj = MIM, exposures = groupID)
 
 
 MIM$flipomega <- MIM$omega
@@ -297,7 +302,7 @@ nit <- 40000
 nburn <- 0.5*nit
 nthin = 5
 set.seed(0)
-N <- nrow(z)
+
 
 
 
