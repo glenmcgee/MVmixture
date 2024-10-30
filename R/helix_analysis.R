@@ -95,43 +95,7 @@ pc <- pairwise_clusters(MIM)
 make_heatplot(pc$beta_y)
 make_heatplot(pc$theta_y)
 
-
-## VIMs
-VIMs <- ExposureImportance(obj = MIM, exposures = groupIDs,nMC=100,nSamp=NULL)
-
-MIM$flipomega <- MIM$omega
-for(kk in 1:MIM$const$K){
-  for(jj in 1:MIM$const$p){
-    signid <- which(apply(MIM$flipomega[[jj]][[kk]],1,sum)<0)
-    MIM$flipomega[[jj]][[kk]][signid,]=-MIM$flipomega[[jj]][[kk]][signid,]
-  }
-}
-plot(MIM$flipomega[[1]][[2]][1,],type="l",col=alpha(rgb(0,0,0), 0.005),ylim=c(-0.6,1))
-for(rr in 2:nrow(MIM$flipomega[[1]][[2]])){
-  lines(MIM$flipomega[[1]][[2]][rr,],type="l",col=alpha(rgb(0,0,0), 0.005))
-}
-
-plot(MIM$flipomega[[2]][[2]][1,],type="l",col=alpha(rgb(0,0,0), 0.005),ylim=c(-0.6,1))
-for(rr in 2:nrow(MIM$flipomega[[2]][[2]])){
-  lines(MIM$flipomega[[2]][[2]][rr,],type="l",col=alpha(rgb(0,0,0), 0.005))
-}
-
-plot(MIM$flipomega[[3]][[2]][1,],type="l",col=alpha(rgb(0,0,0), 0.005),ylim=c(-0.6,1))
-for(rr in 2:nrow(MIM$flipomega[[3]][[2]])){
-  lines(MIM$flipomega[[3]][[2]][rr,],type="l",col=alpha(rgb(0,0,0), 0.005))
-}
-
-plot(MIM$flipomega[[4]][[2]][1,],type="l",col=alpha(rgb(0,0,0), 0.005),ylim=c(-0.6,1))
-for(rr in 2:nrow(MIM$flipomega[[4]][[2]])){
-  lines(MIM$flipomega[[4]][[2]][rr,],type="l",col=alpha(rgb(0,0,0), 0.005))
-}
-
-xnames <- colnames(Reduce("cbind",exposure_list))
-cbind(xnames[order(-apply((MIM$omega[[1]][[1]])^2,2,sum))[1:10]],
-      xnames[order(-apply((MIM$omega[[2]][[1]])^2,2,sum))[1:10]],
-      xnames[order(-apply((MIM$omega[[3]][[1]])^2,2,sum))[1:10]],
-      xnames[order(-apply((MIM$omega[[4]][[1]])^2,2,sum))[1:10]])
-
+VIMs_MIM <- ExposureImportance(obj=MIM,exposures=groupIDs,nMC=100)
 
 
 
@@ -169,6 +133,8 @@ sapply(1:3,function(jj) lm(pred_singleIndex$summary[[jj]]$mean~Y[,jj])$coef)
 
 
 boxplot(singleIndex$sigma2)
+
+VIMs_singleIndex <- ExposureImportance(obj=singleIndex,exposures=groupIDs,nMC=100)
 
 
 
@@ -211,6 +177,8 @@ pc_singleIndexClust <- pairwise_clusters(singleIndexClust)
 make_heatplot(pc_singleIndexClust$beta_y)
 make_heatplot(pc_singleIndexClust$theta_y)
 
+VIMs_singleIndexClust <- ExposureImportance(obj=singleIndexClust,exposures=groupIDs,nMC=100)
+
 
 #######################################
 ## Fit twoIndex (MIM2) model
@@ -252,88 +220,7 @@ pc_MIM2 <- pairwise_clusters(MIM2)
 make_heatplot(pc_MIM2$beta_y)
 make_heatplot(pc_MIM2$theta_y)
 
-
-#######################################
-## Fit twoIndex model
-## No clustering
-#######################################
-
-nit <- 10000
-nburn <- 0.5*nit
-nthin = 5
-set.seed(0)
-
-
-twoIndex <- MVmix(as.matrix(Y),list(Reduce("cbind",exposure_list),Reduce("cbind",exposure_list)),Z=z,
-              niter=nit,nburn=nburn,nthin=nthin,
-              Vgridsearch = TRUE,gridsize=10,
-              MIM=FALSE,MIMorder = 2,
-              cluster="neither",maxClusters=6,sharedlambda = FALSE,
-              DLM=FALSE,approx=TRUE)
-save(twoIndex, file = "helix_twoIndex.RData")
-
-pred_twoIndex <- predict_MVmix(twoIndex,
-                           newX = list(Reduce("cbind",exposure_list),Reduce("cbind",exposure_list)),
-                           newZ = z,
-                           include_intercept=TRUE, allx=TRUE)
-
-lapply(1:3,function(jj) {
-  plot(pred_twoIndex$summary[[jj]]$mean~Y[,jj])
-  abline(0,1,col="red")
-})
-sapply(1:3,function(jj) cor(pred_twoIndex$summary[[jj]]$mean,Y[,jj]))
-sapply(1:3,function(jj) lm(pred_twoIndex$summary[[jj]]$mean~Y[,jj])$coef)
-
-
-boxplot(twoIndex$sigma2)
-
-pc_twoIndex <- pairwise_clusters(twoIndex)
-make_heatplot(pc_twoIndex$beta_y)
-make_heatplot(pc_twoIndex$theta_y)
-
-
-#######################################
-## Fit twoIndex model
-## HIGH clustering
-#######################################
-
-nit <- 40000
-nburn <- 0.5*nit
-nthin = 5
-set.seed(0)
-
-
-
-
-twoIndexClust <- MVmix(as.matrix(Y)[trainids,],Reduce("cbind",exposure_list)[trainids,],Z=z[trainids,],
-                  niter=nit,nburn=nburn,nthin=nthin,
-                  Vgridsearch = TRUE,gridsize=10,
-                  MIM=TRUE,MIMorder = 2,
-                  cluster="both",maxClusters=6,sharedlambda = FALSE,
-                  DLM=FALSE,approx=TRUE,
-                  prior_alpha_beta = c(1,10), ## encouraging clustering
-                  prior_alpha_theta = c(1,10))
-save(twoIndexClust, file = "helix_twoIndexClust.RData")
-
-pred_twoIndexClust <- predict_MVmix(twoIndexClust,
-                               newX = Reduce("cbind",exposure_list)[testids,],
-                               newZ = z[testids,],
-                               include_intercept=TRUE, allx=TRUE)
-
-lapply(1:3,function(jj) {
-  plot(pred_twoIndexClust$summary[[jj]]$mean~Y[testids,jj])
-  abline(0,1,col="red")
-})
-sapply(1:3,function(jj) cor(pred_twoIndexClust$summary[[jj]]$mean,Y[testids,jj]))
-sapply(1:3,function(jj) lm(pred_twoIndexClust$summary[[jj]]$mean~Y[testids,jj])$coef)
-
-
-boxplot(twoIndexClust$sigma2)
-
-pc_twoIndexClust <- pairwise_clusters(twoIndexClust)
-make_heatplot(pc_twoIndexClust$beta_y)
-make_heatplot(pc_twoIndexClust$theta_y)
-
+VIMs_MIM2 <- ExposureImportance(obj=MIM2,exposures=groupIDs,nMC=100)
 
 
 

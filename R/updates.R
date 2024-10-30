@@ -103,14 +103,24 @@ update_V <- function(params,const){
 
     ## sample V_c^beta
     if(const$clustering=="both" | const$clustering=="beta"){
-      probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=TRUE,const) })) ## looping over grid, compute density
-      params$Vbeta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+      logprobs <- sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=TRUE,const) }) ## looping over grid, compute density
+      ## error handling for very small values
+      if(sum(exp(logprobs))==0){
+        stbfctr <- -500-max(logprobs) ## max largest value -500
+        logprobs <- logprobs+stbfctr ## multiply all probs by common factor
+      }
+      params$Vbeta[cc] <- sample(const$grid,1,prob=exp(logprobs)) ## sample from the grid
     }
 
     ## sample V_c^theta
     if(const$clustering=="both" | const$clustering=="theta"){
-      probs <- exp(sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=FALSE,const) })) ## looping over grid, compute density
-      params$Vtheta[cc] <- sample(const$grid,1,prob=probs) ## sample from the grid
+      logprobs <- sapply(const$grid,function(vv){get_Vlogdensity(vv,cc,params,Vbeta=FALSE,const) }) ## looping over grid, compute density
+      ## error handling for very small values
+      if(sum(exp(logprobs))==0){
+        stbfctr <- -500-max(logprobs) ## max largest value -500
+        logprobs <- logprobs+stbfctr ## multiply all probs by common factor
+      }
+      params$Vtheta[cc] <- sample(const$grid,1,prob=exp(logprobs)) ## sample from the grid
     }
 
   }
