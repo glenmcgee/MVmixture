@@ -97,8 +97,7 @@ make_heatplot(pc$theta_y)
 
 
 ## VIMs
-VIMs = lapply(groupIDs,function(groupID) ExposureImportance(obj = MIM, exposures = groupID,nMC=100))
-
+VIMs <- ExposureImportance(obj = MIM, exposures = groupIDs,nMC=100,nSamp=NULL)
 
 MIM$flipomega <- MIM$omega
 for(kk in 1:MIM$const$K){

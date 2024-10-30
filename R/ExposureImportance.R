@@ -1,19 +1,10 @@
 require(randomForest)
+require(tidyverse)
 
-ExposureImportance = function(obj, exposures,
-                              nMC = 250,
-                              nSamp=NULL) {
-
-  n = dim(obj$u)[2]
-  if(is.null(nSamp)){
-    nSamp = n
-  }
-  p <- obj$const$L[[1]]
-  K <- obj$const$K
-  X <- obj$const$X[[1]]
+compute_integratedVariances <- function(exps,X,n,p,K,nSamp,nMC){
 
   ## Create indices for group of interest and for remaining exposures
-  groupJ = exposures
+  groupJ = exps
   groupNegJ = (1:p)[-groupJ]
 
   ## For each exposure in groupJ, we need predictions given the other exposures
@@ -36,43 +27,63 @@ ExposureImportance = function(obj, exposures,
   ## nSamp is typically going to be n unless n is very large
   samp = sample(1:n, nSamp, replace=FALSE)
 
-  ## Store predictions once X_j is integrated out
-  predStore = matrix(NA, nSamp, K)
-
   ## Monte carlo integral of quantity
+  ## first define X mat
+  newX = matrix(NA, nrow = nMC*nSamp, ncol = p)
+  ## add in Xneg which changes across nSamp, but not across nMC
+  for(jj in groupNegJ){
+    newX[,jj] = rep(X[samp,jj],each=nMC)
+  }
+  ## Sample nMC values from their conditional distribution (Normal approx)
   for (ni in 1 : nSamp) {
-    ## Which observation are we looking at first
-    Xneg = X[samp[ni],groupNegJ]
-
-    ## Sample nMC values from their conditional distribution
-    XjSamp = t(matrix(rep(predJ[samp[ni],], nMC), ncol=nMC)) +
+    newX[(ni-1)*nMC+1:nMC,groupJ] = t(matrix(rep(predJ[samp[ni],], nMC), ncol=nMC)) +
       t(t(cholVarJ) %*% matrix(rnorm(nMC*length(groupJ)), ncol=nMC))
-
-    ## Now make predictions there
-    newX = matrix(NA, nrow = nMC, ncol = p)
-    newX[,groupJ] = XjSamp
-    newX[,groupNegJ] = t(matrix(rep(Xneg, nMC), nrow=length(groupNegJ)))
-    pred <- predict_MVmix(obj, newX = newX, include_intercept=TRUE, allx=TRUE)
-
-    ## Take average across MC samples
-    for (kk in 1 : K) {
-      predStore[ni,kk] = mean(pred$summary[[kk]]$mean)
-    }
   }
 
-  ## Final variance estimates
-  integratedVariances = apply(predStore, 2, var)
+  ## Now make predictions on stacked newX
+  pred <- predict_MVmix(obj, newX = newX, include_intercept=TRUE, allx=TRUE)
+
+  ## Take average across MC samples
+  integratedVariances <- rep(NA,K)
+  for (kk in 1 : K) {
+    ## take mean across nMC
+    dfpred <- data.frame(nsamp=rep(1:nSamp,each=nMC),
+                         pred=pred$summary[[kk]]$mean)
+    predmean <- dfpred %>% group_by(nsamp) %>% summarize_all(mean)
+
+    ## Final variance estimates across nSamp
+    integratedVariances[kk] <- var(predmean$pred)
+
+  }
+
+  return(integratedVariances)
+}
+
+ExposureImportance = function(obj, exposures,
+                              nMC = 250,
+                              nSamp=NULL) {
+
+  n = dim(obj$u)[2]
+  if(is.null(nSamp)){
+    nSamp = n
+  }
+  p <- obj$const$L[[1]]
+  K <- obj$const$K
+  X <- obj$const$X[[1]]
+  if(!is.list(exposures)){
+    exposures <- list(exposures)
+  }
+
+  ## numerators
+  integratedVariances <- lapply(exposures,function(exp_set){compute_integratedVariances(exp_set,X,n,p,K,nSamp,nMC)})
 
   ## Variance estimates without integrating out X_j
   pred <- predict_MVmix(obj, newX = X, include_intercept=TRUE, allx=TRUE)
-  origVariances = rep(NA, K)
-
-  for (kk in 1 : K) {
-    origVariances[kk] = var(pred$summary[[kk]]$mean)
-  }
+  origVariances = sapply(1:K,function(kk){var(pred$summary[[kk]]$mean)})
 
   ## Final value of VIM
-  VIMs = 1 - integratedVariances/origVariances
+  VIMs = sapply(integratedVariances,function(x) 1 - x/origVariances)
 
-  return(VIMs)
+  return(list(VIM=VIMs,
+              varF=origVariances))
 }
