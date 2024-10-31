@@ -1,7 +1,7 @@
 require(randomForest)
 require(tidyverse)
 
-compute_integratedVariances <- function(exps,X,n,p,K,nSamp,nMC){
+compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
 
   ## Create indices for group of interest and for remaining exposures
   groupJ = exps
@@ -75,7 +75,7 @@ ExposureImportance = function(obj, exposures,
   }
 
   ## numerators
-  integratedVariances <- lapply(exposures,function(exp_set){compute_integratedVariances(exp_set,X,n,p,K,nSamp,nMC)})
+  integratedVariances <- lapply(exposures,function(exp_set){compute_integratedVariances(obj,exp_set,X,n,p,K,nSamp,nMC)})
 
   ## Variance estimates without integrating out X_j
   pred <- predict_MVmix(obj, newX = X, include_intercept=TRUE, allx=TRUE)
