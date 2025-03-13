@@ -38,7 +38,13 @@ get_Btheta <- function(Xomega,const,params=NULL,k,j){
     }else{  ## identifiability product for MIM
       IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
     }
-    return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+
+    if(const$LM==TRUE){ ## if forcing linearity
+      return(IDprod*Xomega)
+    }else{
+      return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+    }
+
 
 
 }
@@ -52,7 +58,12 @@ get_DerivBtheta <- function(Xomega,const,params,k,j){
   }else{  ## identifiability product for MIM
     IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
   }
-  return(IDprod*mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+  if(const$LM==TRUE){ ## deriv is 1 if forcing linear effects
+    return(IDprod*((Xomega)^0))
+  }else{
+    return(IDprod*mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+  }
+
   ## standard version
   # if(ncol(as.matrix(Xomega))>1){
   #   return(sapply(1:ncol(Xomega),function(jj){mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega[,jj]))}))
@@ -97,7 +108,12 @@ get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
   }else{  ## identifiability product for MIM
     IDprod <- prod(Ztheta[k,1:(j-1)]!=Ztheta[k,j])
   }
-  return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+  if(const$LM==TRUE){ ## if forcing linear effects
+    return(IDprod*Xomega)
+  }else{
+    return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+  }
+
 }
 ## alternate version for updating Ztheta=b in update_clustMemb
 get_B_beta_k_b <- function(params,const,kk,Ztheta){
@@ -295,7 +311,7 @@ initialize_const <- function(Y, ## response
                              # prior_sigma2_u,
                              prior_xi,
                              prior_sigma2,
-                             prior_phi_a,
+                             prop_phi_a,
                              sharedlambda,
                              DLM,
                              DLMpenalty,
@@ -303,6 +319,8 @@ initialize_const <- function(Y, ## response
                              diff,
                              MIM,
                              MIMorder,
+                             LM,
+                             betaOrder,
                              ## MH tuning
                              stepsize_logrho,
                              stepsize_loglambda_theta,
@@ -340,7 +358,7 @@ initialize_const <- function(Y, ## response
                 # prior_sigma2_u=prior_sigma2_u,
                 prior_xi=prior_xi,
                 prior_sigma2=prior_sigma2,
-                prior_phi_a=prior_phi_a,
+                prop_phi_a=prop_phi_a,
                 sharedlambda=sharedlambda,
                 DLM=DLM,
                 DLMpenalty=DLMpenalty,
@@ -348,6 +366,8 @@ initialize_const <- function(Y, ## response
                 diff=diff,
                 MIM=MIM,
                 MIMorder=MIMorder,
+                LM=LM,
+                betaOrder=betaOrder,
                 ## MH tuning
                 stepsize_logrho=stepsize_logrho,
                 stepsize_loglambda_theta=stepsize_loglambda_theta,
@@ -387,6 +407,15 @@ initialize_const <- function(Y, ## response
   ## max number of clusters
   ### different ONLY when clustering!="both"
   const$Cbeta <- const$Ctheta <- const$C
+
+  ## no theta updates if single exposure
+  if(const$L==1){
+    if(const$clustering=="both"){
+      const$clustering <- "beta"
+    }else if(const$clustering=="theta"){
+      const$clustering <- "neither"
+    }
+  }
 
   ## cannot provide fixed IDs if clustering
   if(const$clustering=="both" | const$clustering=="beta"){
@@ -516,16 +545,25 @@ initialize_const <- function(Y, ## response
 
   ## basis functions
   ### Uses same basis functions for all exposures.
-  tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
-  ## combining all exposures to get basis functions
-  Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
-  const$SS <- mgcv::smoothCon(s(Xomega,bs="bs"),data=data.frame(Xomega),
-                              absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
-  const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
-  const$SSderiv$deriv <- 1 ## first order derivatives
-  const$d <- ncol(const$SS$X)
-  const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
-  const$invSig0 <- const$SS$S[[1]]
+  if(const$LM==TRUE){
+    const$sharedlambda <- TRUE ## single ridge penalty
+    const$SS <- NULL
+    const$SSderiv <- NULL ## make a smooth object for computing first order derivatives
+    const$d <- 1
+    const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
+    const$invSig0 <- as.matrix(1)
+  }else{
+    tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
+    ## combining all exposures to get basis functions
+    Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
+    const$SS <- mgcv::smoothCon(s(Xomega,bs="bs",k=betaOrder),data=data.frame(Xomega),
+                                absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
+    const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
+    const$SSderiv$deriv <- 1 ## first order derivatives
+    const$d <- ncol(const$SS$X)
+    const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
+    const$invSig0 <- const$SS$S[[1]]
+  }
 
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
@@ -581,6 +619,9 @@ get_starting_vals <- function(const){
   }else{
     params$lambda_beta <- rgamma(const$Cbeta,shape=1,rate=1)
   }
+  if(const$LM==TRUE){
+    params$lambda_beta <- 5
+  }
 
 
   if(const$DLM==TRUE & const$DLMpenalty==TRUE){
@@ -607,21 +648,34 @@ get_starting_vals <- function(const){
     params$u <- rep(0,const$n)
   }
 
-
-  ## initialize omegastar
-  if(const$approx==FALSE){ ## use polar coordinate parameterization
-    params$phistar <- rbeta((const$Lq-1)*const$Ctheta,1,1)
-    params$thetastar <- sapply(1:const$Ctheta,function(cc){
-      return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
-    })
-  }else{ ## otherwise just draw from fb
+  if(const$L==1){ ## dont need theta if L==1
     params$phistar <- NULL
-    params$thetastar <- c(t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
+    params$omegastar <- params$thetastar <- rep(1,const$Ctheta)
+
+  }else{
+    ## initialize omegastar
+    if(const$approx==FALSE){ ## use polar coordinate parameterization
+      params$phistar <- pi*rbeta((const$Lq-1)*const$Ctheta,1,1)-pi/2
+      ## this one works
+      # params$phistar <- rbeta((const$Lq-1)*const$Ctheta,1,1)
+      # params$phistar <- c(sapply(1:const$Ctheta,function(cc){
+      #   phistar <- params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]
+      #   return(c(pi*phistar[1:(const$Lq-2)]-pi/2,pi*phistar[(const$Lq-1)]))
+      # }))
+      params$thetastar <- sapply(1:const$Ctheta,function(cc){
+        return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
+      })
+    }else{ ## otherwise just draw from fb
+      params$phistar <- NULL
+      params$thetastar <- c(t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
+    }
+    ## convert thetastar to omegastar if necessary (Psi is just Identity if not a DLM, then omegastar=thetastar)
+    params$omegastar <- sapply(1:const$Ctheta,function(cc){
+      return(c(const$Psi%*%params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
+    })
   }
-  ## convert thetastar to omegastar if necessary (Psi is just Identity if not a DLM, then omegastar=thetastar)
-  params$omegastar <- sapply(1:const$Ctheta,function(cc){
-    return(c(const$Psi%*%params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
-  })
+
+
 
   # ## testing ##
   # params$thetastar <- params$omegastar <- rep(theta1,const$C)

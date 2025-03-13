@@ -278,7 +278,7 @@ update_betastar <- function(params,const){
           y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]
             if(length(whichkNotj[[kk]])>0){
               y_u <- y_u - Reduce("+",lapply(whichkNotj[[kk]],function(jj){
-                Btheta[[jj]][const$k_index==kk,]%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+                Btheta[[jj]][const$k_index==kk,,drop=F]%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d),drop=F]
               }))
             }
           return(y_u/sqrt(params$sigma2[kk])) ## sqrt because it multiples B
@@ -384,24 +384,36 @@ update_thetastar_MH_beta <- function(params, const){
       whichkj <- lapply(1:const$K,function(kk){sort(whichZ[whichZ[,1]==kk,2])})
       whichkNotj <- lapply(1:const$K,function(kk){which(!(1:const$p)%in%whichkj[[kk]])  })
 
-      for(jj in 1:(const$Lq-1)){
+      for(jj in sample(1:(const$Lq-1))){
         prop_params <- params
 
-        ## phi on beta scale
-        if(jj==1){ ## phi_1 defined on [0,pi/2]
-          phibeta <- prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(pi/2)
-        }else{ ## phi_j defined on [-pi/2,pi/2]
-          phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+(pi/2))/pi
-        }
+        phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+pi/2)/pi
+        ## this one works:
+        # ## phi on beta scale
+        # if(jj==(const$Lq-1)){ ## phi_1 defined on [0,2pi]
+        #   phibeta <- prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(2*pi)#prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(pi/2)
+        # }else{ ## phi_j defined on [-pi/2,pi/2]
+        #   phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+pi/2)/pi#(prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+(pi/2))/pi
+        # }
 
         ## propose new phi_j from pi*beta distribution (using previous value as mode)
-        b_mode <- ((1-(phibeta))*const$prior_phi_a+2*(phibeta)-1)/(phibeta) ## using previous value as mode
-        prop_phibeta <- rbeta(1,const$prior_phi_a,b_mode)
-        if(jj==1){ ## phi_1 defined on [0,pi/2]
-          prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- (pi/2)*prop_phibeta
-        }else{ ## phi_j defined on [-pi/2,pi/2]
-          prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
-        }
+        phibetamode <- phibeta
+        # if(phibetamode>0.99){ ##  dont think this is necessary now that were not restricting b_mode below
+        #   phibetamode <- 0.99
+        # }else if(phibetamode<0.01){
+        #   phibetamode <- 0.01
+        # }
+        b_mode <- ((1-(phibetamode))*const$prop_phi_a+2*(phibetamode)-1)/(phibetamode) ## using previous value as mode
+        prop_phibeta <- rbeta(1,const$prop_phi_a,b_mode)
+        b_mode_reverse <- ((1-(prop_phibeta))*const$prop_phi_a+2*(prop_phibeta)-1)/(prop_phibeta) ## using previous value as mode
+
+        prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
+        ## this one works
+        # if(jj==(const$Lq-1)){ ## phi_1 defined on [0,2pi]
+        #   prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- 2*pi*prop_phibeta#(pi/2)*prop_phibeta
+        # }else{ ## phi_j defined on [-pi/2,pi/2]
+        #   prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
+        # }
 
         ## compute corresponding omegastar proposal and Btheta
         # prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- get_theta(prop_params$phistar[(cc-1)*(const$L-1)+(1:(const$L-1))])
@@ -421,20 +433,36 @@ update_thetastar_MH_beta <- function(params, const){
         y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,])^2)/params$sigma2[kk]})
 
         ## calculate acceptance ratio
-        logLikRatio <- -0.5*sum(prop_y_B_u2) -
-          -0.5*sum(y_B_u2)
+        logLikRatio <- (-0.5*sum(prop_y_B_u2)) -
+          (-0.5*sum(y_B_u2))
 
-        logPriorRatio <- const$prior_tau_theta*rep(1,const$Lq)%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]) -
-          const$prior_tau_theta*rep(1,const$Lq)%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])
+        logPriorRatio <- (const$prior_tau_theta*rep(1,const$Lq)%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(prop_params$loglambda_theta)*c(t(prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])) -
+          (const$prior_tau_theta*rep(1,const$Lq)%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]-0.5*exp(params$loglambda_theta)*c(t(params$thetastar[(cc-1)*const$Lq+(1:const$Lq)])%*%const$PEN%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]))+
+          ## from change of variable
+          (const$Lq-jj)*log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj]))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
+          (const$Lq-jj)*log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
 
         ## compare on beta scales
-        logPropRatio <- dbeta(prop_phibeta,const$prior_phi_a,b_mode,log=TRUE) -
-          dbeta(phibeta,const$prior_phi_a,b_mode,log=TRUE) +
-          ## from change of variable
-          log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
-          log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj)))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
-
+        logPropRatio <- dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
+          dbeta(phibeta,const$prop_phi_a,b_mode_reverse,log=TRUE)
+          # ## from change of variable
+          # log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
+          # log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj)))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
+        # print(c(phibeta,prop_phibeta,dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE)))
         logRatio <- logLikRatio+logPriorRatio-logPropRatio
+        # if(jj==1){
+        #   print(c(logLikRatio))
+        #   print(c(logPriorRatio))
+        #   print(logPropRatio)
+        #   print(c("lik","prior","Prop","change")[order(abs(c(logLikRatio,
+        #                                                      logPriorRatio,
+        #                                                      dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
+        #                                                        dbeta(phibeta,const$prop_phi_a,b_mode,log=TRUE),
+        #                                                      (const$Lq-jj)*log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj]))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
+        #                                                        (const$Lq-jj)*log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj]))))),decreasing=TRUE)[1]])
+        #   print(c(exp(logRatio)))
+        #   print("done")
+        # }
         if(log(runif(1,0,1)) < logRatio){ ## accept
           params <- prop_params
         }

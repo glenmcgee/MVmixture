@@ -1,9 +1,15 @@
 
 
 
-summarize_pred <- function(pred){
+summarize_pred <- function(pred,contrast){
+
   summlist <- lapply(pred,function(pMat){
     lapply(pMat,function(pmat){
+
+      if(contrast==TRUE){
+        pmat <- pmat-matrix(c(pmat[floor(nrow(pmat)/2),]),ncol=ncol(pmat),nrow=nrow(pmat),byrow=TRUE)
+      }
+
       summ <- data.frame(mean=apply(pmat,1,mean),
                          lower=apply(pmat,1,function(x)quantile(x,0.025)),
                          upper=apply(pmat,1,function(x)quantile(x,0.975)) )
@@ -33,7 +39,8 @@ predict_MVmix <- function(obj,
                           fixomega=FALSE,
                           fixomegaval=NULL,
                           include_intercept=TRUE,
-                          allx=FALSE){ ## combine all x simultaneously
+                          allx=FALSE,## combine all x simultaneously
+                          contrast=FALSE){ ## report contrasts
 
   # beta <- assign_betas(obj)
   # omega <- assign_omegas(obj)
@@ -73,7 +80,7 @@ predict_MVmix <- function(obj,
     if(!is.null(fixomegaval)){ ## use given value
       omega <- fixomegaval
     }else{## otherwise use mean values
-      omega <- lapply(omega,function(omeg){
+      omega <- lapply(obj$omega,function(omeg){
         lapply(omeg,function(om){
           apply(om,2,mean)})})
     }
@@ -99,8 +106,99 @@ predict_MVmix <- function(obj,
   if(allx==TRUE){
     summpred <- summarize_pred_all(pred,obj,include_intercept,newZ)
   }else{
-    summpred <- summarize_pred(pred)
+    summpred <- summarize_pred(pred,contrast)
   }
   return(list(values=pred,
               summary=summpred))
+}
+
+
+
+## estimate effect of 1 unit change in x_lag for each different lag holding others constant
+est_lag <- function(obj,
+                    Xhold=NULL, ## value to compare to and for other exposures to be set to. NULL defaults to median
+                    Xshift=1, ## increase in X for contrasts
+                    fixomega=FALSE,
+                    fixomegaval=NULL){
+
+  newX <- lapply(1:obj$const$p,function(jj){
+    if(is.null(Xhold)){
+      Xholdjj <- median(obj$const$X[[jj]])
+    }else{
+      Xholdjj <- Xhold
+    }
+    ## make all values equal to hold
+    newXjj <- matrix(Xholdjj,nrow=obj$const$L,ncol=obj$const$L)
+    diag(newXjj) <- diag(newXjj)+Xshift
+    ## make first row of
+    newXjj <- as.matrix(rbind(rep(Xholdjj,obj$const$L),newXjj))
+  })
+
+  if(obj$const$MIM==FALSE){
+    I_b0 <- 1
+  }else{
+    stop("Only built for DLMs")
+  }
+
+
+  RR <- nrow(as.matrix(obj$sigma2))
+  if(fixomega==FALSE){ ## sample theta
+
+    pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
+      lapply(1:obj$const$p,function(jj){ ## loop over exposures
+        sapply(1:RR,function(rr){## loop over samples
+          I_b0*(obj$b0[rr,kk])+
+            get_Btheta(newX[[jj]]%*%c(obj$omega[[jj]][[kk]][rr,]),obj$const,
+                       list(Ztheta=matrix(obj$Ztheta[,,rr],
+                                          nrow=obj$const$K)),kk,jj)%*%
+            (obj$beta[[jj]][[kk]][rr,])
+        })
+      })
+    })
+  }else{ ## otherwise use fixed theta
+
+    if(!is.null(fixomegaval)){ ## use given value
+      omega <- fixomegaval
+    }else{## otherwise use mean values
+      omega <- lapply(obj$omega,function(omeg){
+        lapply(omeg,function(om){
+          apply(om,2,mean)})})
+    }
+    for(jj in 1:obj$const$p){ ## standardizing if necessary
+      for(kk in 1:obj$const$K){
+        omega[[jj]][[kk]] <- omega[[jj]][[kk]]/sqrt(sum(omega[[jj]][[kk]]^2))
+      }
+    }
+
+    pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
+      lapply(1:obj$const$p,function(jj){ ## loop over exposures
+        Btheta <- get_Btheta(newX[[jj]]%*%c(omega[[jj]][[kk]]),
+                             obj$const,list(Ztheta=matrix(obj$Ztheta[,,1],
+                                                          nrow=obj$const$K)),kk,jj)
+        sapply(1:RR,function(rr){## loop over samples
+          I_b0*(obj$b0[rr,kk])+Btheta%*%(obj$beta[[jj]][[kk]][rr,])
+        })
+      })
+    })
+
+  }
+
+
+  summlist <- lapply(pred,function(pMat){
+      lapply(pMat,function(pmat){
+
+
+        pmat <- pmat-matrix(c(pmat[1,]),ncol=ncol(pmat),nrow=nrow(pmat),byrow=TRUE)
+
+
+        summ <- data.frame(mean=apply(pmat[-1,],1,mean),
+                           lower=apply(pmat[-1,],1,function(x)quantile(x,0.025)),
+                           upper=apply(pmat[-1,],1,function(x)quantile(x,0.975)) )
+      })
+    })
+
+
+
+  return(list(values=pred,
+              summary=summlist))
 }

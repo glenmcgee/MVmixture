@@ -73,6 +73,31 @@ build_sampler <- function(const){
     }
   }
 
+  ## if forcing linearity, dont update lambda_beta
+  if(const$LM==TRUE){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_lambda_beta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+  }
+
+  ## no theta step (or loglambda_theta step) if L==1
+  if(const$L==1){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_loglambda_theta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+  }
+
+
   ## replace rfb/approximation with MH
    if(const$approx==FALSE){
     for(ll in 2:(length(body(update_params))-1)){

@@ -34,10 +34,15 @@ groupIDs <- lapply(1:length(END),function(ll){START[ll]:END[ll]})
 ################
 ## covariates ##
 ################
-z <- cbind(z_base_preg,z_base_post)
+z <- data.frame(cbind(z_base_preg,z_base_post))
 # remove covariates that are already adjusted for in the outcome or related to the outcome
 z <- z[,-which(colnames(z)%in%c("hs_child_age_None","e3_sex_Nonemale","hs_c_weight_None","hs_c_height_None"))]
+z$e3_yearbir_None <- factor(z$e3_yearbir_None,levels=sort(unique(z$e3_yearbir_None)),labels=2003:2009)
+z <- model.matrix(~.,data=z)[,-1]
 N <- nrow(z)
+
+## reduced further for preg+post analyses
+z_red <- z[,-which(colnames(z)%in%c("hs_wgtgain_None","e3_gac_None","h_cohort2","h_cohort3","h_cohort4","h_cohort5","h_cohort6"))]
 
 ###############
 ## outcomes ###
@@ -60,13 +65,13 @@ testids <- (1:N)[-trainids]
 ## Fit MIM
 #######################################
 
-nit <- 5000
+nit <- 30000
 nburn <- 0.5*nit
 nthin = 5
 set.seed(0)
 
 
-MIM <- MVmix(as.matrix(as.matrix(Y)[trainids,]),Reduce("cbind",exposure_list)[trainids,],Z=z[trainids,],
+MIM <- MVmix(as.matrix(as.matrix(Y)[trainids,]),Reduce("cbind",exposure_list)[trainids,],Z=z_red[trainids,],
                 niter=nit,nburn=nburn,nthin=nthin,
                 Vgridsearch = TRUE,gridsize=10,
                 MIM=TRUE,MIMorder=4,
@@ -78,7 +83,7 @@ save(MIM, file = "helix_MIM.RData")
 
 pred_MIM <- predict_MVmix(MIM,
                           newX = Reduce("cbind",exposure_list)[testids,],
-                          newZ = z[testids,],
+                          newZ = z_red[testids,],
                           include_intercept=TRUE,
                           allx=TRUE)
 
@@ -95,8 +100,50 @@ pc <- pairwise_clusters(MIM)
 make_heatplot(pc$beta_y)
 make_heatplot(pc$theta_y)
 
-VIMs_MIM <- ExposureImportance(obj=MIM,exposures=groupIDs,nMC=100)
+VIMs_MIM <- ExposureImportance(obj=MIM,exposures=groupIDs,nMC=50)
 
+
+
+#######################################
+## Fit MIM_nocov
+#######################################
+
+nit <- 30000
+nburn <- 0.5*nit
+nthin = 5
+set.seed(0)
+
+
+MIM_nocov <- MVmix(as.matrix(as.matrix(Y)[trainids,]),Reduce("cbind",exposure_list)[trainids,],Z=NULL,
+             niter=nit,nburn=nburn,nthin=nthin,
+             Vgridsearch = TRUE,gridsize=10,
+             MIM=TRUE,MIMorder=4,
+             cluster="both",maxClusters=12,sharedlambda = FALSE,
+             DLM=FALSE,approx=TRUE,
+             prior_alpha_beta = c(1,5), ## encouraging clustering
+             prior_alpha_theta = c(1,5))
+save(MIM_nocov, file = "helix_MIM_nocov.RData")
+
+pred_MIM_nocov <- predict_MVmix(MIM_nocov,
+                          newX = Reduce("cbind",exposure_list)[testids,],
+                          # newZ = z_red[testids,],
+                          include_intercept=TRUE,
+                          allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_MIM_nocov$summary[[jj]]$mean~Y[testids,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_MIM_nocov$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_MIM_nocov$summary[[jj]]$mean~Y[testids,jj])$coef)
+
+boxplot(MIM_nocov$sigma2)
+
+pc_nocov <- pairwise_clusters(MIM_nocov)
+make_heatplot(pc_nocov$beta_y)
+make_heatplot(pc_nocov$theta_y)
+
+VIMs_MIM_nocov <- ExposureImportance(obj=MIM_nocov,exposures=groupIDs,nMC=50)
 
 
 #######################################
@@ -111,7 +158,10 @@ nthin = 5
 set.seed(0)
 
 
-singleIndex <- MVmix(as.matrix(Y),list(Reduce("cbind",exposure_list)),Z=z,
+singleIndex <- MVmix(as.matrix(Y),list(sort(MIM2$omega[[1]][[2]]^2)
+sort(MIM2$omega[[1]][[2]]^2)
+sort(MIM2$omega[[1]][[2]]^2)
+),Z=z,
              niter=nit,nburn=nburn,nthin=nthin,
              Vgridsearch = TRUE,gridsize=10,
              MIM=FALSE,
@@ -144,18 +194,17 @@ VIMs_singleIndex <- ExposureImportance(obj=singleIndex,exposures=groupIDs,nMC=10
 ## With clustering
 #######################################
 
-nit <- 10000
-nburn <- 0.5*nit
-nthin = 5
 set.seed(0)
 
 
-singleIndexClust <- MVmix(as.matrix(as.matrix(Y)[trainids,1:2]),list(Reduce("cbind",exposure_list)[trainids,]),Z=z[trainids,],
+singleIndexClust <- MVmix(as.matrix(as.matrix(Y)[trainids,]),list(Reduce("cbind",exposure_list)[trainids,]),Z=z[trainids,],
                      niter=nit,nburn=nburn,nthin=nthin,
                      Vgridsearch = TRUE,gridsize=10,
                      MIM=FALSE,
                      cluster="both",maxClusters=3,sharedlambda = FALSE,
-                     DLM=FALSE,approx=TRUE)
+                     DLM=FALSE,approx=TRUE,
+                     prior_alpha_beta = c(1,5), ## encouraging clustering
+                     prior_alpha_theta = c(1,5))
 save(singleIndexClust, file = "helix_singleIndexClust.RData")
 
 pred_singleIndexClust <- predict_MVmix(singleIndexClust,
@@ -177,7 +226,7 @@ pc_singleIndexClust <- pairwise_clusters(singleIndexClust)
 make_heatplot(pc_singleIndexClust$beta_y)
 make_heatplot(pc_singleIndexClust$theta_y)
 
-VIMs_singleIndexClust <- ExposureImportance(obj=singleIndexClust,exposures=groupIDs,nMC=100)
+VIMs_singleIndexClust <- ExposureImportance(obj=singleIndexClust,exposures=groupIDs[[7]],nMC=50)
 
 
 #######################################
@@ -220,20 +269,69 @@ pc_MIM2 <- pairwise_clusters(MIM2)
 make_heatplot(pc_MIM2$beta_y)
 make_heatplot(pc_MIM2$theta_y)
 
-VIMs_MIM2 <- ExposureImportance(obj=MIM2,exposures=groupIDs,nMC=100)
+# top10index <- head(order(apply(singleIndex$omega[[1]][[2]]^2,2,median),decreasing=TRUE),10)
+# VIMs_MIM2 <- ExposureImportance(obj=MIM2,exposures=as.list(top10index),nMC=100)
+
+VIMs_MIM2 <- ExposureImportance(obj=MIM2,exposures=groupIDs,nMC=100,nSamp = 100)
+
+
+
+#######################################
+## Fit PRE and POST Index Model
+#######################################
+## one index for pregnancy, one for postnatal
+Xpreg <- Reduce("cbind",lapply(time_exposure_list,function(x)x[,1]))
+Xpost <- Reduce("cbind",lapply(time_exposure_list,function(x)x[,2]))
+
+pregpost <- MVmix(as.matrix(Y)[trainids,],list(Xpreg[trainids,],Xpost[trainids,]),Z=z_red[trainids,],
+                  niter=nit,nburn=nburn,nthin=nthin,
+                  Vgridsearch = TRUE,gridsize=10,
+                  DLM=TRUE,DLMpenalty=FALSE,lagOrder=NULL,diff=1, ## no penalty or basis expansion (since L=2)
+                  cluster="both",maxClusters=6,approx=TRUE,
+                  prior_alpha_beta = c(1,5), ## encouraging clustering
+                  prior_alpha_theta = c(1,5))
+save(pregpost, file = "helix_pregpost.RData")
+
+pred_pregpost <- predict_MVmix(pregpost,
+                           newX = list(Xpreg[testids,],Xpost[testids,]),
+                           newZ = z_red[testids,],
+                           include_intercept=TRUE, allx=TRUE)
+
+lapply(1:3,function(jj) {
+  plot(pred_pregpost$summary[[jj]]$mean~Y[testids,jj])
+  abline(0,1,col="red")
+})
+sapply(1:3,function(jj) cor(pred_pregpost$summary[[jj]]$mean,Y[testids,jj]))
+sapply(1:3,function(jj) lm(pred_pregpost$summary[[jj]]$mean~Y[testids,jj])$coef)
+
+boxplot(pregpost$sigma2)
+
+pc_pregpost <- pairwise_clusters(pregpost)
+make_heatplot(pc_pregpost$beta_y)
+make_heatplot(pc_pregpost$theta_y)
+
+## important components
+whichx <- lapply(1:3,function(kk){lapply(1:2,function(jj){order(apply(pregpost$theta[[jj]][[kk]]^2,2,mean))[1:5]})})
+lapply(1:3,function(kk){lapply(1:2,function(jj){
+  mdn <- apply(pregpost$theta[[jj]][[kk]][,whichx[[jj]][[kk]]],2,median)
+  names(mdn) <- names(time_exposure_list)[whichx[[jj]][[kk]]]
+  mdn
+})})
 
 
 
 #######################################
 ## Fit DLNM
 #######################################
-
-DLAG <- MVmix(as.matrix(Y),time_exposure_list,Z=z,
+XDLAG_train <- lapply(time_exposure_list,function(x)x[trainids,])
+DLAG <- MVmix(as.matrix(Y)[trainids,],XDLAG_train,Z=z[trainids,],
              niter=nit,nburn=nburn,nthin=nthin,
              Vgridsearch = TRUE,gridsize=10,
              DLM=TRUE,DLMpenalty=FALSE,lagOrder=NULL,diff=1, ## no penalty or basis expansion (since L=2)
-             cluster="both",maxClusters=20,approx=TRUE)
-
+             cluster="both",maxClusters=20,approx=TRUE,
+             prior_alpha_beta = c(1,5), ## encouraging clustering
+             prior_alpha_theta = c(1,5))
+save(DLAG, file = "helix_DLAG.RData")
 
 
 
@@ -350,3 +448,11 @@ DLAG <- MVmix(as.matrix(Y),time_exposure_list,Z=z,
 #                    stepsize_theta=0.1,#0.35
 #                    draw_h=FALSE,
 #                    num_theta_steps = 10)
+
+
+
+test <- reshape2::melt(MIM2$omega[[1]][[2]],id.var=c("iter","x"),variable.name = "omega")
+colnames(test) <- c("iter","x","omega")
+ggplot(data=test,aes(x=x,y=omega,group=iter))+
+  geom_line(alpha=0.005)+
+  ylim(-1,1)

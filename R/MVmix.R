@@ -38,7 +38,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   # prior_sigma2_u=c(0.01,0.01),
                   prior_xi=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
-                  prior_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
+                  prop_phi_a=200, ## hyperparameter a for the beta(a,b) prior on phistar
                   sharedlambda=TRUE,
                   DLM=FALSE, ## use b-spline approximation to impose smoothness over time
                   DLMpenalty=FALSE, ## include smoothness penalty over time, only if DLM=TRUE
@@ -46,6 +46,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                   diff=8, ## degree of difference penalty matrix (if DLM=TRUE)
                   MIM=FALSE, ## fit MIM version
                   MIMorder=4, ## maximum order of MIM (ignored if MIM=FALSE)
+                  LM=FALSE, ## force linear effects
+                  betaOrder=-1, ## b spline basis dimension for exposure response functions. default -1 allows mgcv to choose automatically
                   ## MH tuning
                   stepsize_logrho=1, ## sd for random walk
                   stepsize_loglambda_theta=1, ## sd for random walk
@@ -80,7 +82,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                             # prior_sigma2_u,
                             prior_xi,
                             prior_sigma2,
-                            prior_phi_a,
+                            prop_phi_a,
                             sharedlambda,
                             DLM,
                             DLMpenalty,
@@ -88,6 +90,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                             diff,
                             MIM,
                             MIMorder,
+                            LM,
+                            betaOrder,
                             ## MH tuning
                             stepsize_logrho,
                             stepsize_loglambda_theta,
@@ -247,22 +251,22 @@ MVmix <- function(Y, ## n x K matrix of responses
   ## assign beta and theta from betastar and thetastar
   samples$beta <- lapply(1:samples$const$p,function(jj){
                     lapply(1:samples$const$K,function(kk){
-                      Reduce("rbind",lapply(1:nrow(samples$betastar[[1]]),function(rr){
-                        return(samples$betastar[[samples$Zbeta[kk,jj,rr]]][rr,])
+                      Reduce("rbind",lapply(1:nrow(as.matrix(samples$betastar[[1]])),function(rr){
+                        return(as.matrix(samples$betastar[[samples$Zbeta[kk,jj,rr]]])[rr,,drop=F])
                       }))
                     })
                    })
   samples$theta <- lapply(1:samples$const$p,function(jj){
                       lapply(1:samples$const$K,function(kk){
-                        Reduce("rbind",lapply(1:nrow(samples$thetastar[[1]]),function(rr){
-                          return(samples$thetastar[[samples$Ztheta[kk,jj,rr]]][rr,])
+                        Reduce("rbind",lapply(1:nrow(as.matrix(samples$thetastar[[1]])),function(rr){
+                          return(as.matrix(samples$thetastar[[samples$Ztheta[kk,jj,rr]]])[rr,,drop=F])
                         }))
                       })
                     })
   samples$omega <- lapply(1:samples$const$p,function(jj){
     lapply(1:samples$const$K,function(kk){
-      Reduce("rbind",lapply(1:nrow(samples$omegastar[[1]]),function(rr){
-        return(samples$omegastar[[samples$Ztheta[kk,jj,rr]]][rr,])
+      Reduce("rbind",lapply(1:nrow(as.matrix(samples$omegastar[[1]])),function(rr){
+        return(as.matrix(samples$omegastar[[samples$Ztheta[kk,jj,rr]]])[rr,,drop=F])
       }))
     })
   })
