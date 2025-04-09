@@ -32,7 +32,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_alpha_beta=c(1,1),
                   prior_alpha_theta=c(1,1),
                   prior_rho=c(1,1),
-                  prior_tau_theta=1,
+                  prior_tau_theta=0,# do not change#1,
                   prior_lambda_beta=c(1,1),
                   prior_lambda_theta=c(1,0.0001),
                   # prior_sigma2_u=c(0.01,0.01),

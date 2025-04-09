@@ -568,6 +568,10 @@ initialize_const <- function(Y, ## response
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
 
+  if(const$approx==FALSE){
+    const$prior_tau_theta <- 0 ## force to be 0 for polar sampling, otherwise normalizing constant wont work
+  }
+
   return(const)
 }
 
@@ -655,16 +659,24 @@ get_starting_vals <- function(const){
   }else{
     ## initialize omegastar
     if(const$approx==FALSE){ ## use polar coordinate parameterization
-      params$phistar <- pi*rbeta((const$Lq-1)*const$Ctheta,1,1)-pi/2
-      ## this one works
-      # params$phistar <- rbeta((const$Lq-1)*const$Ctheta,1,1)
-      # params$phistar <- c(sapply(1:const$Ctheta,function(cc){
-      #   phistar <- params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]
-      #   return(c(pi*phistar[1:(const$Lq-2)]-pi/2,pi*phistar[(const$Lq-1)]))
-      # }))
-      params$thetastar <- sapply(1:const$Ctheta,function(cc){
-        return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
+      ## starting with thetastar from fisherbingham, flipping sign if necessary, then converting to phistar
+      thetadraw <- t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0))
+      signid <- thetadraw[const$Lq,]<0
+      thetadraw[,signid] <- -thetadraw[,signid]
+      params$thetastar <- c(thetadraw)
+      params$phistar <- sapply(1:const$Ctheta,function(cc){
+        return(get_phi(params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
       })
+      # params$phistar <- pi*rbeta((const$Lq-1)*const$Ctheta,1,1)-pi/2
+      # ## this one works
+      # # params$phistar <- rbeta((const$Lq-1)*const$Ctheta,1,1)
+      # # params$phistar <- c(sapply(1:const$Ctheta,function(cc){
+      # #   phistar <- params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]
+      # #   return(c(pi*phistar[1:(const$Lq-2)]-pi/2,pi*phistar[(const$Lq-1)]))
+      # # }))
+      # params$thetastar <- sapply(1:const$Ctheta,function(cc){
+      #   return(get_theta(params$phistar[(cc-1)*(const$Lq-1)+1:(const$Lq-1)]))
+      # })
     }else{ ## otherwise just draw from fb
       params$phistar <- NULL
       params$thetastar <- c(t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))

@@ -54,17 +54,21 @@ update_clustMemb <- function(params,const){
         if(const$MIM==TRUE){ ## changing Ztheta may change IDmat
           y_u <- const$y[const$k_index==kk]-params$b0[kk]-(params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
           tempZtheta <- params$Ztheta
-          logprobs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
+          logprobs <- c(sapply(1:const$Ctheta, function(b){  ## loop over b (columns; theta clusters)
             tempZtheta[kk,jj] <- b
+            testconst <- const; testconst$MIM=FALSE
             (log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,const,kk,tempZtheta),1,sum))^2))
-          }))## to be standardized below
 
+            # print(-(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,testconst,kk,tempZtheta),1,sum))^2))
+            # print(-(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,const,kk,tempZtheta),1,sum))^2))
+          }))## to be standardized below
+        # print(params$pimat)
         }else{ ## dont need to worry about ID mat
           ## now have changed
           B_beta <- get_B_beta_k(params,const,kk)
           y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
 
-          logprobs <- c(sapply(1:const$Ctheta, function(b){  ## loop over a (rows; beta clusters)
+          logprobs <- c(sapply(1:const$Ctheta, function(b){  ## loop over b (columns; theta clusters)
             (log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_B_u- get_Btheta(const$X[[jj]]%*%params$omegastar[(b-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)])^2))
           }))## to be standardized below
         }
@@ -474,7 +478,7 @@ update_thetastar_MH_beta <- function(params, const){
                                   mu = const$prior_tau_theta*rep(1,const$Lq),
                                   Aplus = -0.5*exp(params$loglambda_theta)*const$PEN))
       ## fix later: change of variable on vMF (or set tau=0)
-      if(thetadraw[1]<0){
+      if(thetadraw[length(thetadraw)]<0){
         thetadraw <- -thetadraw
       }
       params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
