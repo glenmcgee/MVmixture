@@ -12,7 +12,6 @@ build_sampler <- function(const){
     params <- update_V(params,const)
     params <- update_betastar(params,const)
     params <- update_thetastar(params,const)
-    # params$thetastar <- c(-0.5829585, 0.7846041, -0.2016935, 0.06225415)
     params <- update_alpha(params,const)
     params <- update_logrho(params,const)
     params <- update_lambda_beta(params,const)

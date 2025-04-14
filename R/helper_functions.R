@@ -154,7 +154,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
       lapply(whichkj[[kk]],function(jj){
         c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]]
         })
-      )/sqrt(params$sigma2[kk])
+      )/(params$sigma2[kk]) ## EDITED TO REMOVE SQUARE ROOT. # )/sqrt(params$sigma2[kk])
     })
 
   yhat_k <- lapply(whichk,function(kk){
@@ -163,7 +163,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
              lapply(whichkj[[kk]],function(jj){
                (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
              })
-       ))/sqrt(params$sigma2[kk])
+       ))/sqrt(params$sigma2[kk]) ## EDITED TO BE A SQUARE ROOT. # ))/sqrt(params$sigma2[kk])
   })
 
   return(list(XTX=Reduce("+",lapply(Xhat_k,function(XX){t(XX)%*%XX})),
@@ -331,9 +331,9 @@ initialize_const <- function(Y, ## response
                              rfbtries,
                              approx){
 
-  if(MIM==TRUE){
-    DLM <- FALSE ## mutually exclusive options
-  }
+  # if(MIM==TRUE){
+  #   DLM <- FALSE ## mutually exclusive options
+  # }
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
                 X=X,
@@ -378,13 +378,21 @@ initialize_const <- function(Y, ## response
                 rfbtries=rfbtries,
                 approx=approx)
 
-  ## indices
   if(is.list(X)==FALSE){
     const$X <- list(X)
   }
-  if(const$MIM==TRUE){
+  if(const$MIM==TRUE){ ## no longer using the MIM IDprod paramaterization
+    const$DLM <- TRUE ##
+    const$DLMpenalty <- FALSE ## mutually exclusive options
     const$X <- rep(const$X,const$MIMorder)
+    const$MIM <- FALSE ## shut off the MIM IDprod parameterization . can delete the IDprod components later
   }
+
+
+  ## indices
+  # if(const$MIM==TRUE){
+  #   const$X <- rep(const$X,const$MIMorder)
+  # }
   const$p <- length(const$X)
   const$n <- nrow(const$X[[1]])
   const$K <- ncol(Y)
@@ -568,7 +576,8 @@ initialize_const <- function(Y, ## response
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
 
-  if(const$approx==FALSE){
+  if(const$approx==FALSE & const$prior_tau_theta!=0){
+    print("Forcing prior_tau_theta=0 for polar method.")
     const$prior_tau_theta <- 0 ## force to be 0 for polar sampling, otherwise normalizing constant wont work
   }
 
