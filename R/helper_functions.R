@@ -163,7 +163,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
              lapply(whichkj[[kk]],function(jj){
                (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
              })
-       ))/sqrt(params$sigma2[kk]) ## EDITED TO BE A SQUARE ROOT. # ))/sqrt(params$sigma2[kk])
+       ))/(params$sigma2[kk]) ## EDITED TO BE A SQUARE ROOT. # ))/sqrt(params$sigma2[kk])
   })
 
   return(list(XTX=Reduce("+",lapply(Xhat_k,function(XX){t(XX)%*%XX})),
