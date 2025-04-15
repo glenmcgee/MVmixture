@@ -154,7 +154,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
       lapply(whichkj[[kk]],function(jj){
         c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]]
         })
-      )/(params$sigma2[kk]) ## EDITED TO REMOVE SQUARE ROOT. # )/sqrt(params$sigma2[kk])
+      )/sqrt(params$sigma2[kk]) ## sqrt because it gets multiplied below
     })
 
   yhat_k <- lapply(whichk,function(kk){
@@ -163,7 +163,7 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
              lapply(whichkj[[kk]],function(jj){
                (c(get_DerivB_beta(params,const,kk,jj))*const$XPsi[[jj]])%*%params$thetastar[(cc-1)*const$Lq+(1:const$Lq)]
              })
-       ))/(params$sigma2[kk]) ## EDITED TO BE A SQUARE ROOT. # ))/sqrt(params$sigma2[kk])
+       ))/sqrt(params$sigma2[kk]) ## sqrt because it gets multiplied below
   })
 
   return(list(XTX=Reduce("+",lapply(Xhat_k,function(XX){t(XX)%*%XX})),

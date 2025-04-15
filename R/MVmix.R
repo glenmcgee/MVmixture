@@ -38,7 +38,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   # prior_sigma2_u=c(0.01,0.01),
                   prior_xi=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
-                  prop_phi_a=200, ## hyperparameter a for the beta(a,b) proposal on phistar
+                  prop_phi_a=200, ## hyperparameter a for the beta(a,b) proposal on phistar. higher value means smaller steps
                   sharedlambda=TRUE,
                   DLM=FALSE, ## use b-spline approximation to impose smoothness over time
                   DLMpenalty=FALSE, ## include smoothness penalty over time, only if DLM=TRUE
@@ -55,7 +55,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   stepsize_logsigma2=1,
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
-                  rfbtries=1000, ## mtop for rFisherBingham (default 1000)
+                  rfbtries=10000, ## mtop for rFisherBingham (default 1000)
                   approx=TRUE){ ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
 
   ## set up constants
