@@ -80,7 +80,12 @@ Xnew <- list(matrix(seq1,ncol=maxlag,nrow=npred,byrow=F),
 #################################
 ## Plotting functions
 #################################
-spaghettiplot <- function(x){
+spaghettiplot <- function(x,constraint=TRUE){
+  if(constraint==TRUE){ ## post hoc identifiability constraint for signflipping
+    # id <- apply(x,1,sum)<0
+    id <- x[,ncol(x)]<0
+    x <- x*((-1)^id)
+  }
 
 
   df <- data.frame(Weight=c(t(x)),
@@ -539,7 +544,7 @@ nthin = 5
 chicagoNMMAPS_DLAG <- MVmix(scale(Y),Xlist,Z=Ztime,
                             niter=nit,nburn=nburn,nthin=nthin,
                             Vgridsearch = TRUE,gridsize=10,
-                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=4,diff=2,
+                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=NULL,diff=2,
                             cluster="both",maxClusters=6,approx=FALSE)
 save(chicagoNMMAPS_DLAG, file = paste0("Results/chicagoNMMAPSpolar_DLAG",maxlag,".RData"))
 
@@ -590,7 +595,7 @@ lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1)$summary[[1]][[2]])/
 ## Fit DLNM -- No clustering
 #######################################
 set.seed(1234)
-nit <- 30000
+nit <- 100000
 nburn <- 0.5*nit
 nthin = 5
 
@@ -598,7 +603,6 @@ chicagoNMMAPS_DLAGnoclust <- MVmix(scale(Y),Xlist,Z=Ztime,
                             niter=nit,nburn=nburn,nthin=nthin,
                             Vgridsearch = TRUE,gridsize=10,
                             DLM=TRUE,DLMpenalty=TRUE,lagOrder=6,diff=2,
-                            prop_phi_a=4000, ## trying to improve mixing for MH steps
                             cluster="neither",maxClusters=6,approx=FALSE) ## DOING POLAR
 save(chicagoNMMAPS_DLAGnoclust, file = paste0("Results/chicagoNMMAPSpolar_DLAGnoclust",maxlag,".RData"))
 
@@ -620,8 +624,10 @@ erfplot(pred_DLAGnoclust,jj=2,kk=3)
 
 
 spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[1]])
+spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[2]])
 spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[1]])
-spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[3]][[1]])
+spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[2]])
+
 
 pc_DLAGnoclust <- pairwise_clusters(chicagoNMMAPS_DLAGnoclust)
 make_heatplot(pc_DLAGnoclust$beta_y)+
@@ -687,17 +693,17 @@ lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1)$summary[[1]][[2]])/
 # #######################################
 # ## Fit DLNM Linear
 # #######################################
-# set.seed(0)
-# nit <- 10000
-# nburn <- 0.5*nit
-# nthin = 5
-#
-# chicagoNMMAPS_DLAGLIN <- MVmix(Y,Xlist,Z=Ztime,
-#                             niter=nit,nburn=nburn,nthin=nthin,
-#                             Vgridsearch = TRUE,gridsize=10,LM=TRUE,
-#                             DLM=TRUE,DLMpenalty=TRUE,lagOrder=4,diff=2,
-#                             cluster="both",maxClusters=6,approx=TRUE)
-# save(chicagoNMMAPS_DLAGLIN, file = paste0("Results/chicagoNMMAPS_DLAGLIN",maxlag,".RData"))
+set.seed(0)
+nit <- 10000
+nburn <- 0.5*nit
+nthin = 5
+
+chicagoNMMAPS_DLAGLIN <- MVmix(Y,Xlist,Z=Ztime,
+                            niter=nit,nburn=nburn,nthin=nthin,
+                            Vgridsearch = TRUE,gridsize=10,LM=TRUE,
+                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=4,diff=2,
+                            cluster="both",maxClusters=6,approx=TRUE)
+save(chicagoNMMAPS_DLAGLIN, file = paste0("Results/chicagoNMMAPS_DLAGLIN",maxlag,".RData"))
 #
 # pred_DLAGLIN <- predict_MVmix(chicagoNMMAPS_DLAGLIN,
 #                            newX = Xnew,
@@ -744,12 +750,12 @@ ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_contrast2_lag",maxlag,".pdf"),wi
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[1]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[1]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[2]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[2]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[3]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[3]]))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_weight1_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPSconstrained_weight1_lag",maxlag,".pdf"),width=6,height=8)
 
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[1]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[1]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[2]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[2]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[3]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[3]]))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_weight2_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPSconstrained_weight2_lag",maxlag,".pdf"),width=6,height=8)
 
 
 (erfplot(pred_DLAGnoclust,jj=1,kk=1)+erfplot(pred_DLAG,jj=1,kk=1))/
