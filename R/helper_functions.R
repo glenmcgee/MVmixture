@@ -30,37 +30,23 @@ compute_pi <- function(params,const){
 ## get basis functions
 get_Btheta <- function(Xomega,const,params=NULL,k,j){
 
-    if(const$MIM==FALSE | j==1 ){
-      IDprod <- 1
-    }else{  ## identifiability product for MIM
-      IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
-    }
-
     if(const$LM==TRUE){ ## if forcing linearity
-      return(IDprod*Xomega)
+      return(Xomega)
     }else{
-      return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+      return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
     }
-
-
 
 }
 
 
 ## get derivatives of Basis functions
 get_DerivBtheta <- function(Xomega,const,params,k,j){
-  # if(const$MIM==TRUE){
-  if(const$MIM==FALSE | j==1 ){
-    IDprod <- 1
-  }else{  ## identifiability product for MIM
-    IDprod <- prod(params$Ztheta[k,1:(j-1)]!=params$Ztheta[k,j])
-  }
-  if(const$LM==TRUE){ ## deriv is 1 if forcing linear effects
-    return(IDprod*((Xomega)^0))
-  }else{
-    return(IDprod*mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
-  }
 
+  if(const$LM==TRUE){ ## deriv is 1 if forcing linear effects
+    return(((Xomega)^0))
+  }else{
+    return(mgcv::PredictMat(const$SSderiv,data=data.frame(Xomega)))
+  }
 
 }
 
@@ -94,16 +80,11 @@ get_DerivB_beta <- function(params,const,kk,jj){
 
 ## alternate version for updating Ztheta=b in update_clustMemb
 get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
-  # if(const$MIM==TRUE){
-  if(const$MIM==FALSE | j==1 ){
-    IDprod <- 1
-  }else{  ## identifiability product for MIM
-    IDprod <- prod(Ztheta[k,1:(j-1)]!=Ztheta[k,j])
-  }
+
   if(const$LM==TRUE){ ## if forcing linear effects
-    return(IDprod*Xomega)
+    return(Xomega)
   }else{
-    return(IDprod*mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
+    return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
   }
 
 }
@@ -277,10 +258,9 @@ initialize_const <- function(Y, ## response
     const$X <- list(X)
   }
   if(const$MIM==TRUE){ ## no longer using the MIM IDprod paramaterization
-    const$DLM <- TRUE ##
+    const$DLM <- FALSE ## mutually exclusive options
     const$DLMpenalty <- FALSE ## mutually exclusive options
     const$X <- rep(const$X,const$MIMorder)
-    const$MIM <- FALSE ## shut off the MIM IDprod parameterization . can delete the IDprod components later
   }
 
 

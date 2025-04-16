@@ -132,7 +132,7 @@ est_lag <- function(obj,
     newXjj <- as.matrix(rbind(rep(Xholdjj,obj$const$L),newXjj))
   })
 
-  if(obj$const$MIM==FALSE){
+  if(obj$const$DLM==TRUE){
     I_b0 <- 1
   }else{
     stop("Only built for DLMs")

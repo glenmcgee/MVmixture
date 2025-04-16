@@ -44,9 +44,6 @@ make_heatplot <- function(heat){
     scale_y_discrete(limits=rev)+
     scale_x_discrete(position = 'top',
                      limits=c(colnames(heat)))+
-                     #limits=c(head(colnames(heat),1),tail(colnames(heat),1)))+
-    # guides(x =  guide_axis(angle = 45)) +
-    # guides(fill=guide_legend(title="Prob"))+
     guides(fill="none")+
     theme(plot.margin = unit(c(-0.5,0, 0.5, 0), "cm"),
           panel.background = element_blank())+
