@@ -35,7 +35,6 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_tau_theta=0,# do not change#1,
                   prior_lambda_beta=c(1,1),
                   prior_lambda_theta=c(1,0.01),
-                  # prior_sigma2_u=c(0.01,0.01),
                   prior_xi=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
                   prop_phi_a=200, ## hyperparameter a for the beta(a,b) proposal on phistar. higher value means smaller steps
@@ -79,7 +78,6 @@ MVmix <- function(Y, ## n x K matrix of responses
                             prior_tau_theta,
                             prior_lambda_beta,
                             prior_lambda_theta,
-                            # prior_sigma2_u,
                             prior_xi,
                             prior_sigma2,
                             prop_phi_a,
@@ -127,7 +125,6 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_lambda_beta <- matrix(0,ncol=const$Cbeta,nrow=nkeep)
     keep_loglambda_theta <- matrix(0,ncol=1,nrow=nkeep)
     keep_u <- matrix(0,ncol=const$n,nrow=nkeep)
-    # keep_sigma2_u <- matrix(0,ncol=1,nrow=nkeep)
     keep_xi <- matrix(0,ncol=1,nrow=nkeep)
     keep_sigma2 <- matrix(0,ncol=const$K,nrow=nkeep)
     keep_b0 <- matrix(0,ncol=const$K,nrow=nkeep)
@@ -159,7 +156,6 @@ MVmix <- function(Y, ## n x K matrix of responses
         keep_lambda_beta[skeep,] <- params_ss$lambda_beta
         keep_loglambda_theta[skeep,] <- params_ss$loglambda_theta
         keep_u[skeep,] <- params_ss$u
-        # keep_sigma2_u[skeep,] <- params_ss$sigma2_u
         keep_xi[skeep,] <- params_ss$xi
         keep_sigma2[skeep,] <- params_ss$sigma2
         keep_b0[skeep,] <- params_ss$b0
@@ -181,7 +177,6 @@ MVmix <- function(Y, ## n x K matrix of responses
                 lambda_beta=keep_lambda_beta,
                 loglambda_theta=keep_loglambda_theta,
                 u=keep_u,
-                # sigma2_u=keep_sigma2_u,
                 xi=keep_xi,
                 sigma2=keep_sigma2,
                 b0=keep_b0,
@@ -218,14 +213,6 @@ MVmix <- function(Y, ## n x K matrix of responses
     ## errs
     maxerr <- sapply(chains,function(x)attr(x,"err"))
 
-    # ## compute PSR
-    # samples$PSR <- vector(mode = "list", length = length(names(samples)))
-    # samples$PSR <- lapply(names(samples),function(v){
-    #   compute_PSR(lapply(chains,function(chn){
-    #     chn[[v]]
-    #   }))
-    # })
-    # names(samples$PSR) <- names(samples)
   }
 
   ## summarize clusters

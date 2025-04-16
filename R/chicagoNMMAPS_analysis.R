@@ -537,16 +537,16 @@ lagplot <- function(pred,
 ## Fit DLNM
 #######################################
 set.seed(1)
-nit <- 30000
+nit <- 100000
 nburn <- 0.5*nit
 nthin = 5
 
 chicagoNMMAPS_DLAG <- MVmix(scale(Y),Xlist,Z=Ztime,
                             niter=nit,nburn=nburn,nthin=nthin,
-                            Vgridsearch = TRUE,gridsize=10,
-                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=NULL,diff=2,
-                            cluster="both",maxClusters=6,approx=FALSE)
-save(chicagoNMMAPS_DLAG, file = paste0("Results/chicagoNMMAPSpolar_DLAG",maxlag,".RData"))
+                            Vgridsearch = TRUE,gridsize=10,prior_lambda_theta = c(1,0.01),
+                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=6,diff=2,
+                            cluster="both",maxClusters=6,approx=TRUE)
+save(chicagoNMMAPS_DLAG, file = paste0("Results/chicagoNMMAPS_DLAG",maxlag,".RData"))
 
 pred_DLAG <- predict_MVmix(chicagoNMMAPS_DLAG,
                            newX = Xnew,
@@ -594,17 +594,17 @@ lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1)$summary[[1]][[2]])/
 #######################################
 ## Fit DLNM -- No clustering
 #######################################
-set.seed(1234)
+set.seed(1)
 nit <- 100000
 nburn <- 0.5*nit
 nthin = 5
 
 chicagoNMMAPS_DLAGnoclust <- MVmix(scale(Y),Xlist,Z=Ztime,
                             niter=nit,nburn=nburn,nthin=nthin,
-                            Vgridsearch = TRUE,gridsize=10,
+                            Vgridsearch = TRUE,gridsize=10,prior_lambda_theta = c(1,0.01),
                             DLM=TRUE,DLMpenalty=TRUE,lagOrder=6,diff=2,
-                            cluster="neither",maxClusters=6,approx=FALSE) ## DOING POLAR
-save(chicagoNMMAPS_DLAGnoclust, file = paste0("Results/chicagoNMMAPSpolar_DLAGnoclust",maxlag,".RData"))
+                            cluster="neither",maxClusters=6,approx=TRUE)
+save(chicagoNMMAPS_DLAGnoclust, file = paste0("Results/chicagoNMMAPS_DLAGnoclust",maxlag,".RData"))
 
 pred_DLAGnoclust <- predict_MVmix(chicagoNMMAPS_DLAGnoclust,
                            newX = Xnew,

@@ -4,14 +4,10 @@
 ##
 update_clustMemb <- function(params,const){
 
-  ## EDIT: should be changing with Z?
-  # ## used for the components that are not being summed over
-  # B_beta <- get_B_beta(params,const)
   params$err <- 0 ## for error tracking
 
   for(kk in 1:const$K){## loop over outcomes
     for(jj in 1:const$p){## loop over exposures
-
 
       ## Zbetakj ##
       if(const$clustering=="both" | const$clustering=="beta"){
@@ -20,7 +16,6 @@ update_clustMemb <- function(params,const){
         B_beta <- get_B_beta_k(params,const,kk)
         y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
         Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
-
 
         ## compute probabilities for all possible a
         logprobs <- c(sapply(1:const$Cbeta, function(a){  ## loop over a (rows; beta clusters)
@@ -49,7 +44,6 @@ update_clustMemb <- function(params,const){
       ## Zthetakj ##
       if(const$clustering=="both" | const$clustering=="theta"){
 
-
         ## compute probabilities for all possible b
         if(const$MIM==TRUE){ ## changing Ztheta may change IDmat
           y_u <- const$y[const$k_index==kk]-params$b0[kk]-(params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
@@ -59,10 +53,8 @@ update_clustMemb <- function(params,const){
             testconst <- const; testconst$MIM=FALSE
             (log(params$pimat[params$Zbeta[kk,jj],b]) -(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,const,kk,tempZtheta),1,sum))^2))
 
-            # print(-(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,testconst,kk,tempZtheta),1,sum))^2))
-            # print(-(0.5/params$sigma2[kk])*sum((y_u-apply(get_B_beta_k_b(params,const,kk,tempZtheta),1,sum))^2))
           }))## to be standardized below
-        # print(params$pimat)
+
         }else{ ## dont need to worry about ID mat
           ## now have changed
           B_beta <- get_B_beta_k(params,const,kk)
@@ -254,7 +246,6 @@ update_betastar <- function(params,const){
     }
 
 
-
     if(n_c>0){
       if(const$sharedlambda==TRUE){
         lambda_beta <- params$lambda_beta
@@ -294,8 +285,6 @@ update_betastar <- function(params,const){
       }))
 
       ## compute Vmat only once ## summing over all k in cluster cc
-      # print(lambda_beta)
-      # print(BTB)
       Vmat <- solve(lambda_beta*const$invSig0+BTB)
       Vmat <- (Vmat+t(Vmat))/2
 
@@ -356,12 +345,6 @@ update_thetastar <- function(params,const){
       params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
       ## basis transformation to get back to omega scale
       params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
-      # for(kk in whichk){
-      #   for(jj in whichkj[[kk]]){
-      #     params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
-      #     params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
-      #   }
-      # }
 
     }else{## if n_c=0, draw from the prior
       thetadraw <- c(rFisherBingham(1,
@@ -392,45 +375,20 @@ update_thetastar_MH_beta <- function(params, const){
         prop_params <- params
 
         phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+pi/2)/pi
-        ## this one works:
-        # ## phi on beta scale
-        # if(jj==(const$Lq-1)){ ## phi_1 defined on [0,2pi]
-        #   phibeta <- prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(2*pi)#prop_params$phistar[(cc-1)*(const$Lq-1)+jj]/(pi/2)
-        # }else{ ## phi_j defined on [-pi/2,pi/2]
-        #   phibeta <- (prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+pi/2)/pi#(prop_params$phistar[(cc-1)*(const$Lq-1)+jj]+(pi/2))/pi
-        # }
 
         ## propose new phi_j from pi*beta distribution (using previous value as mode)
         phibetamode <- phibeta
-        # if(phibetamode>0.99){ ##  dont think this is necessary now that were not restricting b_mode below
-        #   phibetamode <- 0.99
-        # }else if(phibetamode<0.01){
-        #   phibetamode <- 0.01
-        # }
         b_mode <- ((1-(phibetamode))*const$prop_phi_a+2*(phibetamode)-1)/(phibetamode) ## using previous value as mode
         prop_phibeta <- rbeta(1,const$prop_phi_a,b_mode)
         b_mode_reverse <- ((1-(prop_phibeta))*const$prop_phi_a+2*(prop_phibeta)-1)/(prop_phibeta) ## using previous value as mode
 
         prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
-        ## this one works
-        # if(jj==(const$Lq-1)){ ## phi_1 defined on [0,2pi]
-        #   prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- 2*pi*prop_phibeta#(pi/2)*prop_phibeta
-        # }else{ ## phi_j defined on [-pi/2,pi/2]
-        #   prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
-        # }
 
         ## compute corresponding omegastar proposal and Btheta
-        # prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- get_theta(prop_params$phistar[(cc-1)*(const$L-1)+(1:(const$L-1))])
         ## basis transformation to get back to omega scale
         thetadraw <- get_theta(prop_params$phistar[(cc-1)*(const$Lq-1)+(1:(const$Lq-1))])
         prop_params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
         prop_params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
-        # for(kk in whichk){
-        #   for(jj in whichkj[[kk]]){
-        #     prop_params$Btheta[[jj]][const$k_index==kk,] <- get_Btheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
-        #     prop_params$DerivBtheta[[jj]][const$k_index==kk,] <- get_DerivBtheta(const$X[[jj]]%*%prop_params$omegastar[(cc-1)*const$L+(1:const$L)],const,params,kk,jj)
-        #   }
-        # }
 
         ## components of likelihood
         prop_y_B_u2 <- sapply(whichk,function(kk){sum((const$y[const$k_index==kk]-prop_params$b0[kk]-apply(get_B_beta_k(prop_params,const,kk),1,sum)-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2)/prop_params$sigma2[kk]})
@@ -449,24 +407,9 @@ update_thetastar_MH_beta <- function(params, const){
         ## compare on beta scales
         logPropRatio <- dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
           dbeta(phibeta,const$prop_phi_a,b_mode_reverse,log=TRUE)
-          # ## from change of variable
-          # log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
-          # log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])^(const$Lq-jj)))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
-        # print(c(phibeta,prop_phibeta,dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE)))
+
         logRatio <- logLikRatio+logPriorRatio-logPropRatio
-        # if(jj==1){
-        #   print(c(logLikRatio))
-        #   print(c(logPriorRatio))
-        #   print(logPropRatio)
-        #   print(c("lik","prior","Prop","change")[order(abs(c(logLikRatio,
-        #                                                      logPriorRatio,
-        #                                                      dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
-        #                                                        dbeta(phibeta,const$prop_phi_a,b_mode,log=TRUE),
-        #                                                      (const$Lq-jj)*log(abs(cos(prop_params$phistar[(cc-1)*(const$Lq-1)+jj]))) -  ## log(abs(cos(prop_phibeta)^(const$Lq-jj))) -
-        #                                                        (const$Lq-jj)*log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj]))))),decreasing=TRUE)[1]])
-        #   print(c(exp(logRatio)))
-        #   print("done")
-        # }
+
         if(log(runif(1,0,1)) < logRatio){ ## accept
           params <- prop_params
         }
@@ -502,10 +445,6 @@ update_alpha <- function(params,const){
     params$alpha[2] <- rgamma(1,shape=const$prior_alpha_theta[1]+const$Ctheta-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$Ctheta])))
   }
 
-  # params$alpha <- c(
-  #   rgamma(1,shape=const$prior_alpha_beta[1]+const$C-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$C]))),
-  #   rgamma(1,shape=const$prior_alpha_theta[1]+const$C-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$C])))
-  # )
 
   return(params) ## alpha_beta then alpha_theta
 }
@@ -591,19 +530,6 @@ update_loglambda_theta <- function(params,const){
   return(params)
 }
 
-##
-# update_u <- function(params,const){
-#
-#   ## first compute B times the corresponding beta for all obs
-#   sumB_beta <- apply(get_B_beta(params,const),1,sum)
-#
-#   for(ii in 1:const$n){## loop over all subjects
-#      params$u[ii] <- rnorm(1,
-#                           mean=(params$sigma2_u/(params$sigma2+const$K*params$sigma2_u))*sum((const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
-#                           sd=sqrt(params$sigma2_u*params$sigma2/(params$sigma2+const$K*params$sigma2_u))  )
-#   }
-#   return(params)
-# }
 
 update_u <- function(params,const){
 
@@ -645,7 +571,21 @@ update_xi <- function(params,const){
 }
 
 
-## old version
+## old version (where var(u)=sigma2_u)
+#
+# update_u <- function(params,const){
+#
+#   ## first compute B times the corresponding beta for all obs
+#   sumB_beta <- apply(get_B_beta(params,const),1,sum)
+#
+#   for(ii in 1:const$n){## loop over all subjects
+#      params$u[ii] <- rnorm(1,
+#                           mean=(params$sigma2_u/(params$sigma2+const$K*params$sigma2_u))*sum((const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
+#                           sd=sqrt(params$sigma2_u*params$sigma2/(params$sigma2+const$K*params$sigma2_u))  )
+#   }
+#   return(params)
+# }
+#
 # update_sigma2_u <- function(params,const){
 #
 #   params$sigma2_u <- 1/rgamma(1,

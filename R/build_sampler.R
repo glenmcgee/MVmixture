@@ -1,6 +1,4 @@
-## 4 options:
-#### Vgridsearch: TRUE vs FALSE
-#### DLM: TRUE vs FALSE
+
 
 ## define MCMC sampler options
 build_sampler <- function(const){
@@ -21,8 +19,6 @@ build_sampler <- function(const){
     params <- update_sigma2_k(params,const)
     params <- update_intercept(params,const)
     params <- update_betaZk(params,const) ## linear confounder coefficients
-    # print(rbind(params$Zbeta,params$Ztheta))
-    # print(params$lambda_beta)
     return(params)
   }
 

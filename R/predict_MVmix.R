@@ -42,8 +42,6 @@ predict_MVmix <- function(obj,
                           allx=FALSE,## combine all x simultaneously
                           contrast=FALSE){ ## report contrasts
 
-  # beta <- assign_betas(obj)
-  # omega <- assign_omegas(obj)
 
   I_b0 <- as.numeric(include_intercept)
   if(allx==TRUE){
