@@ -55,50 +55,60 @@ MVmix <- function(Y, ## n x K matrix of responses
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
                   gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=10000, ## mtop for rFisherBingham (default 1000)
-                  approx=TRUE){ ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
+                  approx=TRUE,  ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
+                  appendchain=NULL){ ## set to previous_fit to keep running chain
 
   ## set up constants
-  const <- initialize_const(Y, ## response
-                            X, ## list of exposures/mixture components
-                            Z, ## confounders to be adjusted
-                            ## MCMC specs
-                            niter, ## number of iterations
-                            nburn, ## burn-in fraction
-                            nthin, ## thinning number
-                            nchains, ## number of chains ## not yet implemented
-                            ncores, ## number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
-                            ## prior hyperparameters
-                            clustering,
-                            fixedZbeta,
-                            fixedZtheta,
-                            maxClusters,
-                            prior_alpha_beta,
-                            prior_alpha_theta,
-                            prior_rho,
-                            prior_tau_theta,
-                            prior_lambda_beta,
-                            prior_lambda_theta,
-                            prior_xi,
-                            prior_sigma2,
-                            prop_phi_a,
-                            sharedlambda,
-                            DLM,
-                            DLMpenalty,
-                            lagOrder,
-                            diff,
-                            MIM,
-                            MIMorder,
-                            LM,
-                            betaOrder,
-                            ## MH tuning
-                            stepsize_logrho,
-                            stepsize_loglambda_theta,
-                            stepsize_logxi,
-                            stepsize_logsigma2,
-                            Vgridsearch,
-                            gridsize,
-                            rfbtries,
-                            approx)
+  if(!is.null(appendchain)){
+    if(!is.null(appendchain$const)){
+      const <- appendchain$const
+    }else{
+      stop("Pass previous fitted object to appendchain argument")
+    }
+  }else{
+    const <- initialize_const(Y, ## response
+                              X, ## list of exposures/mixture components
+                              Z, ## confounders to be adjusted
+                              ## MCMC specs
+                              niter, ## number of iterations
+                              nburn, ## burn-in fraction
+                              nthin, ## thinning number
+                              nchains, ## number of chains ## not yet implemented
+                              ncores, ## number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
+                              ## prior hyperparameters
+                              clustering,
+                              fixedZbeta,
+                              fixedZtheta,
+                              maxClusters,
+                              prior_alpha_beta,
+                              prior_alpha_theta,
+                              prior_rho,
+                              prior_tau_theta,
+                              prior_lambda_beta,
+                              prior_lambda_theta,
+                              prior_xi,
+                              prior_sigma2,
+                              prop_phi_a,
+                              sharedlambda,
+                              DLM,
+                              DLMpenalty,
+                              lagOrder,
+                              diff,
+                              MIM,
+                              MIMorder,
+                              LM,
+                              betaOrder,
+                              ## MH tuning
+                              stepsize_logrho,
+                              stepsize_loglambda_theta,
+                              stepsize_logxi,
+                              stepsize_logsigma2,
+                              Vgridsearch,
+                              gridsize,
+                              rfbtries,
+                              approx)
+  }
+
 
   ## set up MCMC sampler with options
   update_params <- build_sampler(const)
@@ -107,8 +117,11 @@ MVmix <- function(Y, ## n x K matrix of responses
   run_sampler <- function(ind){
 
     ## get starting values
-    params_ss <- get_starting_vals(const)
-
+    if(!is.null(appendchain)){
+      params_ss <- appendchain$lastvals ## start where last chain ended
+    }else{
+      params_ss <- get_starting_vals(const)
+    }
 
     ## initialize results storage
     nkeep <- floor((niter-nburn)/nthin)# round
@@ -181,7 +194,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                 sigma2=keep_sigma2,
                 b0=keep_b0,
                 betaZk=keep_betaZk,
-                const=const)
+                const=const,
+                lastvals=params_ss)
     attr(res,"err") <- maxerr
     return(res)
   }
@@ -205,10 +219,11 @@ MVmix <- function(Y, ## n x K matrix of responses
 
     ## append chains
     samples <- chains[[1]] ## use first for names/formatting
-    samples <- lapply(names(samples)[!(names(samples)%in%"const")], ## looping over names of variables to append
+    samples <- lapply(names(samples)[!(names(samples)%in%c("const","lastvals"))], ## looping over names of variables to append
                   function(v){ Reduce('rbind',lapply(chains,function(chn) chn[[v]]))} )## for each variable name, extract element from each chain, then collapse them via rbind
 
     samples$const <- chains[[1]]$const
+    samples$lastvals <- chains[[1]]$lastvals
     names(samples) <- names(chains[[1]])
     ## errs
     maxerr <- sapply(chains,function(x)attr(x,"err"))

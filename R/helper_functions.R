@@ -485,9 +485,9 @@ get_starting_vals <- function(const){
       signid <- thetadraw[const$Lq,]<0
       thetadraw[,signid] <- -thetadraw[,signid]
       params$thetastar <- c(thetadraw)
-      params$phistar <- sapply(1:const$Ctheta,function(cc){
+      params$phistar <- c(sapply(1:const$Ctheta,function(cc){
         return(get_phi(params$thetastar[(cc-1)*(const$Lq)+1:(const$Lq)]))
-      })
+      }))
 
     }else{ ## otherwise just draw from fb
       params$phistar <- NULL
@@ -500,7 +500,7 @@ get_starting_vals <- function(const){
   }
 
   ## Get Xomega and basis functions
-  Xomega <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$omegastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
+  # Xomega <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$omegastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
 
   ## betastar
   params$betastar <- c(t(rmvnorm(const$Cbeta,const$mu0,diag(const$d))))

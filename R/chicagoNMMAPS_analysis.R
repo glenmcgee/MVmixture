@@ -693,17 +693,17 @@ lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1)$summary[[1]][[2]])/
 # #######################################
 # ## Fit DLNM Linear
 # #######################################
-set.seed(0)
-nit <- 10000
-nburn <- 0.5*nit
-nthin = 5
-
-chicagoNMMAPS_DLAGLIN <- MVmix(Y,Xlist,Z=Ztime,
-                            niter=nit,nburn=nburn,nthin=nthin,
-                            Vgridsearch = TRUE,gridsize=10,LM=TRUE,
-                            DLM=TRUE,DLMpenalty=TRUE,lagOrder=4,diff=2,
-                            cluster="both",maxClusters=6,approx=TRUE)
-save(chicagoNMMAPS_DLAGLIN, file = paste0("Results/chicagoNMMAPS_DLAGLIN",maxlag,".RData"))
+# set.seed(0)
+# nit <- 10000
+# nburn <- 0.5*nit
+# nthin = 5
+#
+# chicagoNMMAPS_DLAGLIN <- MVmix(Y,Xlist,Z=Ztime,
+#                             niter=nit,nburn=nburn,nthin=nthin,
+#                             Vgridsearch = TRUE,gridsize=10,LM=TRUE,
+#                             DLM=TRUE,DLMpenalty=TRUE,lagOrder=4,diff=2,
+#                             cluster="both",maxClusters=6,approx=TRUE)
+# save(chicagoNMMAPS_DLAGLIN, file = paste0("Results/chicagoNMMAPS_DLAGLIN",maxlag,".RData"))
 #
 # pred_DLAGLIN <- predict_MVmix(chicagoNMMAPS_DLAGLIN,
 #                            newX = Xnew,
@@ -738,33 +738,33 @@ save(chicagoNMMAPS_DLAGLIN, file = paste0("Results/chicagoNMMAPS_DLAGLIN",maxlag
 (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[1]][[1]],ylims=c(-0.15,0.3))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[1]][[1]],ylims=c(-0.15,0.3)))/
   (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[2]][[1]],ylims=c(-0.15,0.3))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[2]][[1]],ylims=c(-0.15,0.3)))/
   (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[3]][[1]],ylims=c(-0.15,0.3))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[3]][[1]],ylims=c(-0.15,0.3)))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_contrast1_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_contrast1_lag",maxlag,".pdf"),width=6,height=8)
 
 (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[1]][[2]],ylims=c(-0.1,0.15))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[1]][[2]],ylims=c(-0.1,0.15)))/
   (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[2]][[2]],ylims=c(-0.1,0.15))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[2]][[2]],ylims=c(-0.1,0.15)))/
   (lagplot(est_lag(chicagoNMMAPS_DLAGnoclust,Xhold=-1,Xshift=2)$summary[[3]][[2]],ylims=c(-0.1,0.15))+lagplot(est_lag(chicagoNMMAPS_DLAG,Xhold=-1,Xshift=2)$summary[[3]][[2]],ylims=c(-0.1,0.15)))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_contrast2_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_contrast2_lag",maxlag,".pdf"),width=6,height=8)
 
 
 
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[1]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[1]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[2]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[2]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[1]][[3]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[1]][[3]]))
-ggsave(paste0("Results/Plots/chicagoNMMAPSconstrained_weight1_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_weight1_lag",maxlag,".pdf"),width=6,height=8)
 
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[1]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[1]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[2]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[2]]))/
 (spaghettiplot(chicagoNMMAPS_DLAGnoclust$omega[[2]][[3]])+spaghettiplot(chicagoNMMAPS_DLAG$omega[[2]][[3]]))
-ggsave(paste0("Results/Plots/chicagoNMMAPSconstrained_weight2_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_weight2_lag",maxlag,".pdf"),width=6,height=8)
 
 
 (erfplot(pred_DLAGnoclust,jj=1,kk=1)+erfplot(pred_DLAG,jj=1,kk=1))/
 (erfplot(pred_DLAGnoclust,jj=1,kk=2)+erfplot(pred_DLAG,jj=1,kk=2))/
 (erfplot(pred_DLAGnoclust,jj=1,kk=3)+erfplot(pred_DLAG,jj=1,kk=3))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_erf1_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_erf1_lag",maxlag,".pdf"),width=6,height=8)
 
 (erfplot(pred_DLAGnoclust,jj=2,kk=1)+erfplot(pred_DLAG,jj=2,kk=1))/
 (erfplot(pred_DLAGnoclust,jj=2,kk=2)+erfplot(pred_DLAG,jj=2,kk=2))/
 (erfplot(pred_DLAGnoclust,jj=2,kk=3)+erfplot(pred_DLAG,jj=2,kk=3))
-ggsave(paste0("Results/Plots/chicagoNMMAPSpolar_erf2_lag",maxlag,".pdf"),width=6,height=8)
+ggsave(paste0("Results/Plots/chicagoNMMAPS_erf2_lag",maxlag,".pdf"),width=6,height=8)
 
