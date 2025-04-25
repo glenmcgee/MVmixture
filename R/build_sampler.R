@@ -1,6 +1,7 @@
 
 
-## define MCMC sampler options
+#' Construct MCMC sampler
+#' @keywords internal
 build_sampler <- function(const){
 
   ## main update function

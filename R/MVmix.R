@@ -1,20 +1,72 @@
-### MCMC for MVmixture
 
 
-library(parallel)
-library(mvtnorm)
-library(simdd)
-library(mgcv)
-library(MASS)
-setwd("~/GitHub/MVmixture/R")
-source("helper_functions.R")
-source("fb.saddle.R")
-source("updates.R")
-source("build_sampler.R")
-source("predict_MVmix.R")
-source("pairwise_clusters.R")
-source("ExposureImportance.R")
+
+# require(parallel)
+# require(mvtnorm)
+# require(simdd)
+# require(mgcv)
+# require(MASS)
+# require(reshape)
+# require(randomForest)
+# require(tidyverse)
+# setwd("~/GitHub/MVmixture/R")
+# source("helper_functions.R")
+# source("fb.saddle.R")
+# source("updates.R")
+# source("build_sampler.R")
+# source("predict_MVmix.R")
+# source("pairwise_clusters.R")
+# source("ExposureImportance.R")
 ##
+
+#' Fit multivariate mixtures model with adaptive clustering
+#'
+#' This function will take in the observed data and fit a possibly multivariate
+#' additive mixtures model with or without adaptive clustering over outcomes/exposures.
+#'
+#' @param Y   n x K matrix of responses
+#' @param X  p-list of n x L matrix of exposures
+#' @param Z confounders to be adjusted
+#' @param niter number of iterations
+#' @param nburn  burn-in fraction
+#' @param nthin  thinning number
+#' @param nchains  number of chains ## not yet implemented
+#' @param ncores  number of cores for mclapply (set to 1 for non-parallel) ## only used if nchains>1
+#' @param clustering  one of "both","theta","beta" or ,"neither";
+#' @param fixedZbeta  optional KxP matrix of fixed cluster IDs for beta; only used if clustering="theta" or "neither"
+#' @param fixedZtheta  optional KxP matrix of fixed cluster IDs for theta; only used if clustering="theta" or "neither"
+#' @param maxClusters max number of distinct clusters
+#' @param prior_alpha_beta  gamma prior hyperparameters for alpha_beta
+#' @param prior_alpha_theta  gamma prior hyperparameters for alpha_theta
+#' @param prior_rho  gamma prior hyperparameters for rho
+#' @param prior_tau_theta Do not change. prior hyperparameter for thetastar direction
+#' @param prior_lambda_beta gamma prior hyperparameters for lambda_beta controlling smoothness of exposure response functions
+#' @param prior_lambda_theta gamma prior hyperparameters for lambda_theta controlling smoothness of weight functions (if DLMpenalty=TRUE)
+#' @param prior_xi inverse gamma prior hyperparameters for xi
+#' @param prior_sigma2 inverse gamma prior hyperparameters for sigma^2
+#' @param prop_phi_a  hyperparameter a for the beta(a,b) proposal on phistar. Higher value means smaller steps.
+#' @param sharedlambda Should a single lambda value controlling smoothness be shared across all exposure-response functions? T/F
+#' @param DLM Use B-spline approximation to impose smoothness in weights over time
+#' @param DLMpenalty  Include smoothness penalty in weights over time; only if DLM=TRUE
+#' @param lagOrder Number of basis functions for weights (if DLM=TRUE); NULL indicates no dimension reduction
+#' @param diff  Degree of difference penalty matrix (if DLMpenalty=TRUE)
+#' @param MIM Fit MIM version with unknown index structure (T/F)
+#' @param MIMorder Maximum order of MIM (i.e. number of indices); ignored if MIM=FALSE
+#' @param LM Force linear exposure response relationships (T/F)
+#' @param betaOrder B-spline basis dimension for exposure response functions. default -1 allows mgcv to choose automatically
+#' @param stepsize_logrho SD for random walk updates on log(rho)
+#' @param stepsize_loglambda_theta SD for random walk updates on log(lambda_theta)
+#' @param stepsize_logxi SD for random walk updates on log(xi)
+#' @param stepsize_logsigma2 SD for random walk updates on log(sigma2)
+#' @param Vgridsearch Use grid search for approximate sampling of V_c
+#' @param gridsize Size of grid. Not used if Vgridsearch=FALSE
+#' @param rfbtries Max number of tries for drawing from Fisher-Bingham; equiv.to "mtop" for rFisherBingham (default 1000)
+#' @param approx Should rFB approximation be used? Otherwise use polar transformation and MH updates
+#' @param appendchain Option to use last values of a previous fit as starting values for a new chain.
+#'
+#' @return Posterior samples for all parameters.
+#'
+#' @export
 MVmix <- function(Y, ## n x K matrix of responses
                   X, ## p-list of n x L matrix of exposures
                   Z, ## confounders to be adjusted
@@ -34,15 +86,15 @@ MVmix <- function(Y, ## n x K matrix of responses
                   prior_rho=c(1,1),
                   prior_tau_theta=0,# do not change#1,
                   prior_lambda_beta=c(1,1),
-                  prior_lambda_theta=c(1,0.01),
+                  prior_lambda_theta=c(1,0.001),
                   prior_xi=c(0.01,0.01),
                   prior_sigma2=c(0.01,0.01),
                   prop_phi_a=200, ## hyperparameter a for the beta(a,b) proposal on phistar. higher value means smaller steps
                   sharedlambda=TRUE,
                   DLM=FALSE, ## use b-spline approximation to impose smoothness over time
                   DLMpenalty=FALSE, ## include smoothness penalty over time, only if DLM=TRUE
-                  lagOrder=10, ## no. of bases for omega weight function (if DLM=TRUE); NULL indicates no dimension reduction
-                  diff=8, ## degree of difference penalty matrix (if DLM=TRUE)
+                  lagOrder=6, ## no. of bases for omega weight function (if DLM=TRUE); NULL indicates no dimension reduction
+                  diff=2, ## degree of difference penalty matrix (if DLM=TRUE)
                   MIM=FALSE, ## fit MIM version
                   MIMorder=4, ## maximum order of MIM (ignored if MIM=FALSE)
                   LM=FALSE, ## force linear effects
@@ -53,8 +105,8 @@ MVmix <- function(Y, ## n x K matrix of responses
                   stepsize_logxi=1,
                   stepsize_logsigma2=1,
                   Vgridsearch=TRUE, ## use grid search for approximate sampling of V_c
-                  gridsize=20, ## size of grid. Not used it Vgridsearch==FALSE
-                  rfbtries=10000, ## mtop for rFisherBingham (default 1000)
+                  gridsize=10, ## size of grid. Not used it Vgridsearch==FALSE
+                  rfbtries=1000, ## mtop for rFisherBingham (default 1000)
                   approx=TRUE,  ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
                   appendchain=NULL){ ## set to previous_fit to keep running chain
 
@@ -213,7 +265,7 @@ MVmix <- function(Y, ## n x K matrix of responses
         chains[[cc]] <- run_sampler()
       }
     }else{ ## run in parallel with nchains>1 and ncores>1
-      chains <- mclapply(1:nchains,run_sampler,mc.cosamples=ncores)
+      chains <- parallel::mclapply(1:nchains,run_sampler,mc.cosamples=ncores)
     }
 
 

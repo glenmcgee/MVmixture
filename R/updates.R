@@ -1,7 +1,9 @@
 ## update functions
 
 
-##
+
+#' update cluster Membership
+#' @keywords internal
 update_clustMemb <- function(params,const){
 
   params$err <- 0 ## for error tracking
@@ -81,7 +83,8 @@ update_clustMemb <- function(params,const){
 
 
 
-## grid search for V
+#' grid search for V
+#' @keywords internal
 update_V <- function(params,const){
 
   for(cc in 1:(const$C-1)){
@@ -115,7 +118,8 @@ update_V <- function(params,const){
 }
 
 
-## MH step for V
+#' MH step for V
+#' @keywords internal
 update_V_MH <- function(params,const){
 
   nbeta <- sapply(1:const$C, function(cc){sum(params$Zbeta==cc)})   ## n_c^beta
@@ -130,17 +134,17 @@ update_V_MH <- function(params,const){
       ## setting minimum of shape2 param to be 1 for proposals
       s1 <- 1+nbeta[cc]
       s2 <- max(1,prop_params$alpha[1]+sum(nbeta[(cc+1):const$C]))
-      prop_params$Vbeta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
+      prop_params$Vbeta[cc] <- stats::rbeta(1,shape1=s1,shape2=s2 )
 
       ## compute log-acceptance ratio
       logPostRatio <- get_Vlogdensity(prop_params$Vbeta[cc],cc,prop_params,Vbeta=TRUE,const)-
         get_Vlogdensity(params$Vbeta[cc],cc,params,Vbeta=TRUE,const)
 
-      logPropRatio <- dbeta(prop_params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
-        dbeta(params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)
+      logPropRatio <- stats::dbeta(prop_params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
+        stats::dbeta(params$Vbeta[cc],shape1=s1,shape2=s2 ,log=TRUE)
 
       logRatio <- logPostRatio-logPropRatio
-      if(log(runif(1,0,1)) < logRatio){ ## accept
+      if(log(stats::runif(1,0,1)) < logRatio){ ## accept
         ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
         prop_params <- compute_pi(prop_params,const)
         params <- prop_params
@@ -155,17 +159,17 @@ update_V_MH <- function(params,const){
       ## setting minimum of shape2 param to be 1 for proposals
       s1 <- 1+ntheta[cc]
       s2 <- max(1,prop_params$alpha[2]+sum(ntheta[(cc+1):const$C]))
-      prop_params$Vtheta[cc] <- rbeta(1,shape1=s1,shape2=s2 )
+      prop_params$Vtheta[cc] <- stats::rbeta(1,shape1=s1,shape2=s2 )
 
       ## compute log-acceptance ratio
       logPostRatio <- get_Vlogdensity(prop_params$Vtheta[cc],cc,prop_params,Vbeta=FALSE,const)-
         get_Vlogdensity(params$Vtheta[cc],cc,params,Vbeta=FALSE,const)
 
-      logPropRatio <- dbeta(prop_params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
-        dbeta(params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)
+      logPropRatio <- stats::dbeta(prop_params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)-
+        stats::dbeta(params$Vtheta[cc],shape1=s1,shape2=s2 ,log=TRUE)
 
       logRatio <- logPostRatio-logPropRatio
-      if(log(runif(1,0,1)) < logRatio){ ## accept
+      if(log(stats::runif(1,0,1)) < logRatio){ ## accept
         ## update pimat and pistarmat with new V (not needed since get_Vlogdensity computes it anyway)
         prop_params <- compute_pi(prop_params,const)
         params <- prop_params
@@ -178,11 +182,12 @@ update_V_MH <- function(params,const){
   return(params)
 }
 
-
+#' Update intercepts
+#' @keywords internal
 update_intercept <- function(params,const){
 
   for(kk in 1:const$K){
-    params$b0[kk] <- rnorm(1,
+    params$b0[kk] <- stats::rnorm(1,
                        mean=sum((const$y[const$k_index==kk]-apply(get_B_beta_k(params,const,kk),1,sum)-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]))/(const$n),
                        sd=sqrt(params$sigma2[kk]/(const$n)))
   }
@@ -191,7 +196,8 @@ update_intercept <- function(params,const){
 }
 
 
-
+#' Update betaZk
+#' @keywords internal
 update_betaZk <- function(params,const){
 
   ZTZinv <- solve(t(const$Zcovariates)%*%const$Zcovariates)
@@ -206,7 +212,8 @@ update_betaZk <- function(params,const){
 }
 
 
-##
+#' Update betastar
+#' @keywords internal
 update_betastar <- function(params,const){
 
   ## computing only once
@@ -284,7 +291,8 @@ update_betastar <- function(params,const){
 }
 
 
-##
+#' Update thetastar via approx method
+#' @keywords internal
 update_thetastar <- function(params,const){
 
   for(cc in 1:const$Ctheta){
@@ -300,7 +308,7 @@ update_thetastar <- function(params,const){
       XTy <- comps$XTy
 
       thetadraw <-tryCatch({
-        c(rFisherBingham(1,
+        c(simdd::rFisherBingham(1,
                        mu = const$prior_tau_theta*as.matrix(rep(1,const$Lq)) + XTy,#XtWkyhat,
                        Aplus = -0.5*XTX#XtWX
                        -0.5*exp(params$loglambda_theta)*const$PEN,
@@ -322,7 +330,7 @@ update_thetastar <- function(params,const){
       params$omegastar[(cc-1)*const$L+(1:const$L)] <- c(const$Psi%*%thetadraw)
 
     }else{## if n_c=0, draw from the prior
-      thetadraw <- c(rFisherBingham(1,
+      thetadraw <- c(simdd::rFisherBingham(1,
                                   mu = const$prior_tau_theta*rep(1,const$Lq),
                                   Aplus = -0.5*exp(params$loglambda_theta)*const$PEN))
       params$thetastar[(cc-1)*const$Lq+(1:const$Lq)] <- thetadraw
@@ -335,7 +343,8 @@ update_thetastar <- function(params,const){
   return(params)
 }
 
-## do MH on reparameterized index with beta proposals
+#' Update thetastar via MH step on polar coordinates
+#' @keywords internal
 update_thetastar_MH_beta <- function(params, const){
 
   for(cc in 1:const$Cbeta){
@@ -354,7 +363,7 @@ update_thetastar_MH_beta <- function(params, const){
         ## propose new phi_j from pi*beta distribution (using previous value as mode)
         phibetamode <- phibeta
         b_mode <- ((1-(phibetamode))*const$prop_phi_a+2*(phibetamode)-1)/(phibetamode) ## using previous value as mode
-        prop_phibeta <- rbeta(1,const$prop_phi_a,b_mode)
+        prop_phibeta <- stats::rbeta(1,const$prop_phi_a,b_mode)
         b_mode_reverse <- ((1-(prop_phibeta))*const$prop_phi_a+2*(prop_phibeta)-1)/(prop_phibeta) ## using previous value as mode
 
         prop_params$phistar[(cc-1)*(const$Lq-1)+jj] <- pi*prop_phibeta-(pi/2)
@@ -380,19 +389,19 @@ update_thetastar_MH_beta <- function(params, const){
           (const$Lq-jj)*log(abs(cos(params$phistar[(cc-1)*(const$Lq-1)+jj])))  ## log(abs(cos(phibeta)^(const$Lq-jj)))
 
         ## compare on beta scales
-        logPropRatio <- dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
-          dbeta(phibeta,const$prop_phi_a,b_mode_reverse,log=TRUE)
+        logPropRatio <- stats::dbeta(prop_phibeta,const$prop_phi_a,b_mode,log=TRUE) -
+          stats::dbeta(phibeta,const$prop_phi_a,b_mode_reverse,log=TRUE)
 
         logRatio <- logLikRatio+logPriorRatio-logPropRatio
 
-        if(log(runif(1,0,1)) < logRatio){ ## accept
+        if(log(stats::runif(1,0,1)) < logRatio){ ## accept
           params <- prop_params
         }
 
       }
 
     }else{## if n_c=0, draw from the prior
-      thetadraw <- c(rFisherBingham(1,
+      thetadraw <- c(simdd::rFisherBingham(1,
                                   mu = const$prior_tau_theta*rep(1,const$Lq),
                                   Aplus = -0.5*exp(params$loglambda_theta)*const$PEN))
       ## fix later: change of variable on vMF (or set tau=0)
@@ -409,39 +418,41 @@ update_thetastar_MH_beta <- function(params, const){
   return(params)
 }
 
-##
+#' Update alpha
+#' @keywords internal
 update_alpha <- function(params,const){
 
 
   if(const$clustering=="both" | const$clustering=="beta"){
-    params$alpha[1] <- rgamma(1,shape=const$prior_alpha_beta[1]+const$Cbeta-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$Cbeta])))
+    params$alpha[1] <- stats::rgamma(1,shape=const$prior_alpha_beta[1]+const$Cbeta-1,rate=const$prior_alpha_beta[2]-sum(log(1-params$Vbeta[-const$Cbeta])))
   }
   if(const$clustering=="both" | const$clustering=="theta"){
-    params$alpha[2] <- rgamma(1,shape=const$prior_alpha_theta[1]+const$Ctheta-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$Ctheta])))
+    params$alpha[2] <- stats::rgamma(1,shape=const$prior_alpha_theta[1]+const$Ctheta-1,rate=const$prior_alpha_theta[2]-sum(log(1-params$Vtheta[-const$Ctheta])))
   }
 
 
   return(params) ## alpha_beta then alpha_theta
 }
 
-##
+#' Update logrho
+#' @keywords internal
 update_logrho <- function(params,const){
 
   ## proposal
   prop_params <- params
-  prop_params$logrho <- params$logrho+rnorm(1,0,const$stepsize_logrho)
+  prop_params$logrho <- params$logrho+stats::rnorm(1,0,const$stepsize_logrho)
   prop_params <- compute_pi(prop_params,const) ## update proposed pistar and pi accordingly
 
   ## compute log-acceptance ratio
   logLikRatio <- sum(sapply(1:const$p,function(jj){sapply(1:const$K,function(kk){log(prop_params$pistarmat[params$Zbeta[kk,jj],params$Ztheta[kk,jj]])})}))-
     sum(sapply(1:const$p,function(jj){sapply(1:const$K,function(kk){log(params$pistarmat[params$Zbeta[kk],params$Ztheta[kk]])})}))
 
-  logPriorRatio <- dgamma(exp(prop_params$logrho),shape=const$prior_rho[1],rate=const$prior_rho[2],log=TRUE)-
-    dgamma(exp(params$logrho),shape=const$prior_rho[1],rate=const$prior_rho[2],log=TRUE)+
+  logPriorRatio <- stats::dgamma(exp(prop_params$logrho),shape=const$prior_rho[1],rate=const$prior_rho[2],log=TRUE)-
+    stats::dgamma(exp(params$logrho),shape=const$prior_rho[1],rate=const$prior_rho[2],log=TRUE)+
     prop_params$logrho-params$logrho ## from change of variable
 
   logRatio <- logLikRatio+logPriorRatio-0
-  if(log(runif(1,0,1)) < logRatio){ ## accept
+  if(log(stats::runif(1,0,1)) < logRatio){ ## accept
     params <- prop_params
   }
 
@@ -449,21 +460,22 @@ update_logrho <- function(params,const){
 }
 
 
-## smoothness penalty on beta
+#' Update smoothness penalty on beta
+#' @keywords internal
 update_lambda_beta <- function(params,const){
 
   if(const$sharedlambda==TRUE){
     gamrate <- const$prior_lambda_beta[2]+0.5*sum(sapply(1:const$Cbeta, ## summing over all clusters cc
                                                          function(cc){c(t(params$betastar[(cc-1)*const$d+(1:const$d)])%*%const$invSig0%*%params$betastar[(cc-1)*const$d+(1:const$d)])}))
     if(is.finite(gamrate)){
-      params$lambda_beta <- rgamma(1,
+      params$lambda_beta <- stats::rgamma(1,
                                    shape=const$prior_lambda_beta[1]+0.5*const$Cbeta*const$d,
                                    rate=gamrate)
     }
   }else{
     for(cc in 1:const$Cbeta){
 
-      params$lambda_beta[cc] <- rgamma(1,
+      params$lambda_beta[cc] <- stats::rgamma(1,
                                        shape=const$prior_lambda_beta[1]+0.5*const$d,
                                        rate=const$prior_lambda_beta[2]+0.5*c(t(params$betastar[(cc-1)*const$d+(1:const$d)])%*%const$invSig0%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
     }
@@ -474,12 +486,13 @@ update_lambda_beta <- function(params,const){
   return(params)
 }
 
-##
+#' Update smoothness penalty on theta
+#' @keywords internal
 update_loglambda_theta <- function(params,const){
 
   ## proposal
   prop_params <- params
-  prop_params$loglambda_theta <- params$loglambda_theta+rnorm(1,0,const$stepsize_loglambda_theta)
+  prop_params$loglambda_theta <- params$loglambda_theta+stats::rnorm(1,0,const$stepsize_loglambda_theta)
 
   ## compute log-acceptance ratio
   logLikRatio <- (-0.5*exp(prop_params$loglambda_theta)*sum(sapply(1:const$Ctheta, ## summing over all clusters cc
@@ -491,12 +504,12 @@ update_loglambda_theta <- function(params,const){
   ## NOTE: fb.saddle uses the parameterization form Kume and wood 2005; rFisherBingham above uses a different one. Hence we have no negative in the lam term here; but we had negative in the Aplus term above
 
 
-  logPriorRatio <- dgamma(exp(prop_params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)-
-    dgamma(exp(params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)+
+  logPriorRatio <- stats::dgamma(exp(prop_params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)-
+    stats::dgamma(exp(params$loglambda_theta),shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2],log=TRUE)+
     prop_params$loglambda_theta-params$loglambda_theta ## from change of variable
 
   logRatio <- logLikRatio+logPriorRatio-0
-  tryCatch({if(log(runif(1,0,1)) < logRatio){ ## accept
+  tryCatch({if(log(stats::runif(1,0,1)) < logRatio){ ## accept
                 params <- prop_params}
             },
            error=function(err){print("Skipping loglambda_theta")})
@@ -506,20 +519,23 @@ update_loglambda_theta <- function(params,const){
 }
 
 
+#' Update u (ranef)
+#' @keywords internal
 update_u <- function(params,const){
 
   ## first compute B times the corresponding beta for all obs
   sumB_beta <- apply(get_B_beta(params,const),1,sum)
 
   for(ii in 1:const$n){## loop over all subjects
-    params$u[ii] <- rnorm(1,
+    params$u[ii] <- stats::rnorm(1,
                           mean=(1/(1+sum((params$xi^2))))*sum((params$xi*sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii]-t(const$Zcovariates[ii,]%*%t(params$betaZk)))),
                           sd=sqrt(1/(1+sum((params$xi^2))))  )
   }
   return(params)
 }
 
-## update xi via MH
+#' Update xi
+#' @keywords internal
 update_xi <- function(params,const){
 
   ## first compute B times the corresponding beta for all obs
@@ -527,7 +543,7 @@ update_xi <- function(params,const){
 
   ## random walk proposal (on log scale)
   prop_params <- params
-  prop_params$xi <- exp(log(params$xi)+rnorm(1,0,const$stepsize_logxi))
+  prop_params$xi <- exp(log(params$xi)+stats::rnorm(1,0,const$stepsize_logxi))
 
   ## compute log-acceptance ratio
   logLikRatio <-  (-0.5*sum(sapply(1:const$K,function(kk) {(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2)})))   - # prop
@@ -538,7 +554,7 @@ update_xi <- function(params,const){
     log(prop_params$xi)-log(params$xi) ## from change of variable
 
   logRatio <- logLikRatio+logPriorRatio-0
-  if(log(runif(1,0,1)) < logRatio){ ## accept
+  if(log(stats::runif(1,0,1)) < logRatio){ ## accept
     params <- prop_params
   }
 
@@ -554,7 +570,7 @@ update_xi <- function(params,const){
 #   sumB_beta <- apply(get_B_beta(params,const),1,sum)
 #
 #   for(ii in 1:const$n){## loop over all subjects
-#      params$u[ii] <- rnorm(1,
+#      params$u[ii] <- stats::rnorm(1,
 #                           mean=(params$sigma2_u/(params$sigma2+const$K*params$sigma2_u))*sum((const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii])),
 #                           sd=sqrt(params$sigma2_u*params$sigma2/(params$sigma2+const$K*params$sigma2_u))  )
 #   }
@@ -563,7 +579,7 @@ update_xi <- function(params,const){
 #
 # update_sigma2_u <- function(params,const){
 #
-#   params$sigma2_u <- 1/rgamma(1,
+#   params$sigma2_u <- 1/stats::rgamma(1,
 #                             shape=const$prior_sigma2_u[1]+0.5*const$n,
 #                             rate=const$prior_sigma2_u[2]+0.5*sum(params$u^2) )
 #   return(params)
@@ -572,13 +588,14 @@ update_xi <- function(params,const){
 
 
 
-##  single variance component from conjugate when K=1
+#' Update sigma2 (from conjugate when K=1)
+#' @keywords internal
 update_sigma2 <- function(params,const){
 
   ## first compute B times the corresponding beta for all obs
   sumB_beta <- apply(get_B_beta(params,const),1,sum)
 
-  params$sigma2 <- 1/rgamma(1,
+  params$sigma2 <- 1/stats::rgamma(1,
                             shape=const$prior_sigma2[1]+0.5*const$n*const$K,
                             rate=const$prior_sigma2[2]+0.5*(sum((const$y-(rep(params$b0,each=const$n)+sumB_beta+rep(params$u,const$K)+const$Zcovariates%*%params$betaZk[1,]))^2)) )
 
@@ -586,7 +603,8 @@ update_sigma2 <- function(params,const){
 }
 
 
-## update variances via MH when K>1
+#' Update variances (via MH when K>1)
+#' @keywords internal
 update_sigma2_k <- function(params,const){
 
   ## first compute B times the corresponding beta for all obs
@@ -596,7 +614,7 @@ update_sigma2_k <- function(params,const){
 
     ## random walk proposal (on log scale)
     prop_params <- params
-    prop_params$sigma2[kk] <- exp(log(params$sigma2[kk])+rnorm(1,0,const$stepsize_logsigma2))
+    prop_params$sigma2[kk] <- exp(log(params$sigma2[kk])+stats::rnorm(1,0,const$stepsize_logsigma2))
 
     ## compute log-acceptance ratio
     logLikRatio <-  (-0.5*const$n*log(prop_params$sigma2[kk])-0.5*(1/prop_params$sigma2[kk])*sum((const$y[const$k_index==kk]-prop_params$b0[kk]-sumB_beta[const$k_index==kk]-prop_params$xi*sqrt(prop_params$sigma2[kk])*prop_params$u-const$Zcovariates%*%prop_params$betaZk[kk,])^2))   - # prop
@@ -607,7 +625,7 @@ update_sigma2_k <- function(params,const){
        log(prop_params$sigma2[kk])-log(params$sigma2[kk]) ## from change of variable
 
     logRatio <- logLikRatio+logPriorRatio-0
-    if(log(runif(1,0,1)) < logRatio){ ## accept
+    if(log(stats::runif(1,0,1)) < logRatio){ ## accept
       params <- prop_params
     }
 

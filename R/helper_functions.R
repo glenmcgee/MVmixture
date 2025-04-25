@@ -1,5 +1,7 @@
 
-## function to compute pi
+
+#' Compute pi matrix
+#' @keywords internal
 compute_pi <- function(params,const){
 
   if(const$clustering=="both"){
@@ -27,7 +29,8 @@ compute_pi <- function(params,const){
 }
 
 
-## get basis functions
+#' Get basis functions
+#' @keywords internal
 get_Btheta <- function(Xomega,const,params=NULL,k,j){
 
     if(const$LM==TRUE){ ## if forcing linearity
@@ -39,7 +42,8 @@ get_Btheta <- function(Xomega,const,params=NULL,k,j){
 }
 
 
-## get derivatives of Basis functions
+#' Get derivatives of Basis functions
+#' @keywords internal
 get_DerivBtheta <- function(Xomega,const,params,k,j){
 
   if(const$LM==TRUE){ ## deriv is 1 if forcing linear effects
@@ -51,7 +55,8 @@ get_DerivBtheta <- function(Xomega,const,params,k,j){
 }
 
 
-## compute B times the corresponding beta for single cluster
+#' Compute B times the corresponding beta for single cluster
+#' @keywords internal
 get_B_beta_k <- function(params,const,kk){
 
   return(sapply(1:const$p,function(jj){
@@ -60,7 +65,8 @@ get_B_beta_k <- function(params,const,kk){
 
 }
 
-## compute B times the corresponding beta for all obs (d)
+#' Compute B times the corresponding beta for all obs (d)
+#' @keywords internal
 get_B_beta <- function(params,const){
 
   return(Reduce("rbind",lapply(1:const$K,function(kk){
@@ -70,7 +76,8 @@ get_B_beta <- function(params,const){
 }
 
 
-## compute DerivB times the corresponding beta for given k,j
+#' Compute DerivB times the corresponding beta for given k,j
+#' @keywords internal
 get_DerivB_beta <- function(params,const,kk,jj){
 
   return( get_DerivBtheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)] )
@@ -78,7 +85,8 @@ get_DerivB_beta <- function(params,const,kk,jj){
 }
 
 
-## alternate version for updating Ztheta=b in update_clustMemb
+#' Get Btheta (alternate version for updating Ztheta=b in update_clustMemb)
+#' @keywords internal
 get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
 
   if(const$LM==TRUE){ ## if forcing linear effects
@@ -88,7 +96,9 @@ get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
   }
 
 }
-## alternate version for updating Ztheta=b in update_clustMemb
+
+#' Get Btheta times beta (alternate version for updating Ztheta=b in update_clustMemb)
+#' @keywords internal
 get_B_beta_k_b <- function(params,const,kk,Ztheta){
 
   return(sapply(1:const$p,function(jj){
@@ -99,8 +109,8 @@ get_B_beta_k_b <- function(params,const,kk,Ztheta){
 
 
 
-## computes density of V_c ## up to proportionality constant
-## called iteratively by update_V and update_V_MH
+#' Computes density of V_c ## up to proportionality constant
+#' @keywords internal
 get_Vlogdensity <- function(vv,cc,params,
                          Vbeta=TRUE, ## for Vbeta, vs Vtheta
                          const){
@@ -119,7 +129,8 @@ get_Vlogdensity <- function(vv,cc,params,
 }
 
 
-## get components for omegastar sampling
+#' Get components for omegastar sampling
+#' @keywords internal
 get_XTyhat <- function(cc,whichk,whichkj,params,const){
 
   Xhat_k <- lapply(whichk,function(kk){
@@ -145,13 +156,14 @@ get_XTyhat <- function(cc,whichk,whichkj,params,const){
 
 
 
-
-## compute omegastar from phistar
+#' Compute omegastar from phistar
+#' @keywords internal
 get_theta <- function(phistar){
   return(c(sin(phistar),1) * cumprod(c(1,cos(phistar))))
 }
 
-## compute phistar from omegastar
+#' Compute phistar from omegastar
+#' @keywords internal
 get_phi <- function(omegastar){
 
   phistar <- c(asin(omegastar[1]))
@@ -166,7 +178,8 @@ get_phi <- function(omegastar){
 
 
 
-## initialize constants
+#' Initialize constants
+#' @keywords internal
 initialize_const <- function(Y, ## response
                              X, ## list of exposures/mixture components
                              Z, ## confounders to be adjusted
@@ -344,7 +357,7 @@ initialize_const <- function(Y, ## response
       # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
       DDtemp <- diag(const$L)
       for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
-      PEN <- ginv(t(Q) %*% ginv(t(DDtemp) %*% DDtemp) %*% Q)
+      PEN <- MASS::ginv(t(Q) %*% MASS::ginv(t(DDtemp) %*% DDtemp) %*% Q)
       const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
 
     }else{## if is.null(lagOrder) --> dont do basis expansion (no dimension reduction), but still do penalty
@@ -382,7 +395,7 @@ initialize_const <- function(Y, ## response
     tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
     ## combining all exposures to get basis functions
     Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
-    const$SS <- mgcv::smoothCon(s(Xomega,bs="bs",k=betaOrder),data=data.frame(Xomega),
+    const$SS <- mgcv::smoothCon(mgcv::s(Xomega,bs="bs",k=betaOrder),data=data.frame(Xomega),
                                 absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
     const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
     const$SSderiv$deriv <- 1 ## first order derivatives
@@ -403,19 +416,20 @@ initialize_const <- function(Y, ## response
 }
 
 
-## get starting parameter values
+#' Get starting parameter values
+#' @keywords internal
 get_starting_vals <- function(const){
   params <- list()
 
   ## other params from prior
-  params$alpha <- c(rgamma(1,shape=const$prior_alpha_beta[1],rate=const$prior_alpha_beta[2]),
-                    rgamma(1,shape=const$prior_alpha_theta[1],rate=const$prior_alpha_theta[2]) )
+  params$alpha <- c(stats::rgamma(1,shape=const$prior_alpha_beta[1],rate=const$prior_alpha_beta[2]),
+                    stats::rgamma(1,shape=const$prior_alpha_theta[1],rate=const$prior_alpha_theta[2]) )
 
-  params$Vbeta <- c(rbeta(const$Cbeta-1,1,params$alpha[1]),1) ## final value is 1 (truncated)
-  params$Vtheta <- c(rbeta(const$Ctheta-1,1,params$alpha[2]),1) ## final value is 1 (truncated)
+  params$Vbeta <- c(stats::rbeta(const$Cbeta-1,1,params$alpha[1]),1) ## final value is 1 (truncated)
+  params$Vtheta <- c(stats::rbeta(const$Ctheta-1,1,params$alpha[2]),1) ## final value is 1 (truncated)
 
   if(const$clustering=="both"){ ## only defined if clustering jointly
-    params$logrho <- log(rgamma(1,shape=const$prior_rho[1],rate=const$prior_rho[2]))
+    params$logrho <- log(stats::rgamma(1,shape=const$prior_rho[1],rate=const$prior_rho[2]))
   }else{
     params$logrho <- -999
   }
@@ -446,9 +460,9 @@ get_starting_vals <- function(const){
 
 
   if(const$sharedlambda==TRUE){
-    params$lambda_beta <- rgamma(1,shape=1,rate=1)
+    params$lambda_beta <- stats::rgamma(1,shape=1,rate=1)
   }else{
-    params$lambda_beta <- rgamma(const$Cbeta,shape=1,rate=1)
+    params$lambda_beta <- stats::rgamma(const$Cbeta,shape=1,rate=1)
   }
   if(const$LM==TRUE){
     params$lambda_beta <- 5
@@ -456,17 +470,17 @@ get_starting_vals <- function(const){
 
 
   if(const$DLM==TRUE & const$DLMpenalty==TRUE){
-    params$loglambda_theta <- log(rgamma(1,shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2]))
+    params$loglambda_theta <- log(stats::rgamma(1,shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2]))
   }else{
     params$loglambda_theta <- -Inf
   }
 
-  params$sigma2 <- 1/rgamma(const$K,shape=5,rate=1)
+  params$sigma2 <- 1/stats::rgamma(const$K,shape=5,rate=1)
 
   #
   if(const$K>1){
-    params$xi <- 1/rgamma(1,shape=10,rate=1)
-    params$u <- rnorm(const$n,0,1)
+    params$xi <- 1/stats::rgamma(1,shape=10,rate=1)
+    params$u <- stats::rnorm(const$n,0,1)
 
   }else{
     params$xi <- 0
@@ -481,7 +495,7 @@ get_starting_vals <- function(const){
     ## initialize omegastar
     if(const$approx==FALSE){ ## use polar coordinate parameterization
       ## starting with thetastar from fisherbingham, flipping sign if necessary, then converting to phistar
-      thetadraw <- t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0))
+      thetadraw <- t(simdd::rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0))
       signid <- thetadraw[const$Lq,]<0
       thetadraw[,signid] <- -thetadraw[,signid]
       params$thetastar <- c(thetadraw)
@@ -491,7 +505,7 @@ get_starting_vals <- function(const){
 
     }else{ ## otherwise just draw from fb
       params$phistar <- NULL
-      params$thetastar <- c(t(rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
+      params$thetastar <- c(t(simdd::rFisherBingham(const$Ctheta,mu = const$prior_tau_theta*rep(1,const$Lq), Aplus = 0)))
     }
     ## convert thetastar to omegastar if necessary (Psi is just Identity if not a DLM, then omegastar=thetastar)
     params$omegastar <- sapply(1:const$Ctheta,function(cc){
@@ -503,16 +517,16 @@ get_starting_vals <- function(const){
   # Xomega <- sapply(1:const$p,function(jj){matrix(sapply(1:const$K,function(kk){const$X[[jj]]%*%params$omegastar[(params$Zbeta[kk,jj]-1)*const$L+(1:const$L)]}))})
 
   ## betastar
-  params$betastar <- c(t(rmvnorm(const$Cbeta,const$mu0,diag(const$d))))
+  params$betastar <- c(t(mvtnorm::rmvnorm(const$Cbeta,const$mu0,diag(const$d))))
 
   ## intercepts
-  params$b0 <- rnorm(const$K)
+  params$b0 <- stats::rnorm(const$K)
 
   # linear coefficients
   if(is.null(const$Z)){
     params$betaZk <- matrix(0,ncol=1,nrow=const$K)
   }else{
-    # matrix(rnorm(const$pz*const$K),ncol=const$pz,nrow=const$K)
+    # matrix(stats::rnorm(const$pz*const$K),ncol=const$pz,nrow=const$K)
     # alternatively could just start with LS:
     ZZ <- cbind(1,const$Zcovariates)
     LS <- t(solve(t(ZZ)%*%ZZ)%*%t(ZZ)%*%matrix(const$y,ncol=const$K))

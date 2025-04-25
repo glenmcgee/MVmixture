@@ -6,6 +6,14 @@
 #### Saddlepoint approximations for the Bingham and Fisher-Bingham normalizing constants (Biometrika)
 ################################
 
+#' Saddle point approximation of FB distribution.
+#'
+#' By: Tsagris Michail 02/2014.
+#' mtsagris@yahoo.gr.
+#' References: Kume Alfred and Wood Andrew T.A. (2005)
+#' Saddlepoint approximations for the Bingham and Fisher-Bingham normalizing constants (Biometrika)
+#'
+#' @keywords internal
 fb.saddle <- function(gam, lam) {
   ## gam is the parameters of the Fisher part
   ## lam is the eigenvalues of the matrix of the Bingham part
@@ -29,7 +37,7 @@ fb.saddle <- function(gam, lam) {
   low <- lam[1] - 0.25 * p - 0.5 * sqrt(0.25 * p^2 + p * max(gam)^2)  ## lower bound
   up <- lam[1] - 0.25 - 0.5 * sqrt( 0.25 + min(gam)^2 )  ## not the exact upper
   ## bound but a bit higher
-  ela <- uniroot(saddle.equat, c(low, up), para = para, tol = 1e-08)
+  ela <- stats::uniroot(saddle.equat, c(low, up), para = para, tol = 1e-08)
   tau <- ela$root  ## tau which solves the saddlepoint equation
   ### below are the derivatives of the cumulant generating function
   kfb <- function(j, gam, lam, ta) {

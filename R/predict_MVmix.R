@@ -1,6 +1,7 @@
 
 
-
+#' Summarize predictions
+#' @keywords internal
 summarize_pred <- function(pred,contrast){
 
   summlist <- lapply(pred,function(pMat){
@@ -11,28 +12,45 @@ summarize_pred <- function(pred,contrast){
       }
 
       summ <- data.frame(mean=apply(pmat,1,mean),
-                         lower=apply(pmat,1,function(x)quantile(x,0.025)),
-                         upper=apply(pmat,1,function(x)quantile(x,0.975)) )
+                         lower=apply(pmat,1,function(x)stats::quantile(x,0.025)),
+                         upper=apply(pmat,1,function(x)stats::quantile(x,0.975)) )
     })
   })
   return(summlist)
 }
 
-## when summing all fns, need to add in intercept
+
+#' Summarize all predictions with intercept handling
+#' @keywords internal
 summarize_pred_all <- function(pred,obj,include_intercept,newZ){
   summlist <- lapply(1:length(pred),function(kk){
     pmat <- Reduce("+",pred[[kk]])+
       as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(newZ))+
       newZ%*%t(obj$betaZk[,(kk-1)*obj$const$pz+(1:obj$const$pz)])
     return(data.frame(mean=apply(pmat,1,mean),
-                      lower=apply(pmat,1,function(x)quantile(x,0.025)),
-                      upper=apply(pmat,1,function(x)quantile(x,0.975)) ))
+                      lower=apply(pmat,1,function(x)stats::quantile(x,0.025)),
+                      upper=apply(pmat,1,function(x)stats::quantile(x,0.975)) ))
   })
   return(summlist)
 }
 
 
-## function for estimating fitted/predicted values
+#' Predict/estimate exposure response surface
+#'
+#' Function for estimating fitted/predicted values
+#'
+#' @param obj fitted model object
+#' @param newX optional list of new exposure values
+#' @param newZ optional matrix of new covariates; if null, dont include covariate effects
+#' @param fixomega hold weights fixed (default FALSE)
+#' @param fixomegaval fixed weight values (if fixomega=TRUE)
+#' @param include_intercept include intercept in predictions (T/F)
+#' @param allx combine all x simultaneously or do individual exposure prediction (T/F)
+#' @param contrast report contrasts (T/F)
+#'
+#' @return list of predictions/fitted values
+#'
+#' @export
 predict_MVmix <- function(obj,
                           newX=NULL,
                           newZ=NULL, ## if null, dont include covariate effects
@@ -112,7 +130,19 @@ predict_MVmix <- function(obj,
 
 
 
-## estimate effect of 1 unit change in x_lag for each different lag holding others constant
+#' Estimate lagged effects
+#'
+#' Estimate effect of 1 unit change in x_lag for each different lag holding others constant
+#'
+#' @param obj fitted model
+#' @param Xhold value to compare to and for other exposures to be set to. NULL defaults to median
+#' @param Xshift increase in X for contrasts
+#' @param fixomega hold weights fixed (default FALSE)
+#' @param fixomegaval fixed weight values (if fixomega=TRUE)
+#'
+#' @return lagged effect estimates
+#'
+#' @export
 est_lag <- function(obj,
                     Xhold=NULL, ## value to compare to and for other exposures to be set to. NULL defaults to median
                     Xshift=1, ## increase in X for contrasts
@@ -121,7 +151,7 @@ est_lag <- function(obj,
 
   newX <- lapply(1:obj$const$p,function(jj){
     if(is.null(Xhold)){
-      Xholdjj <- median(obj$const$X[[jj]])
+      Xholdjj <- stats::median(obj$const$X[[jj]])
     }else{
       Xholdjj <- Xhold
     }
@@ -190,8 +220,8 @@ est_lag <- function(obj,
 
 
         summ <- data.frame(mean=apply(pmat[-1,],1,mean),
-                           lower=apply(pmat[-1,],1,function(x)quantile(x,0.025)),
-                           upper=apply(pmat[-1,],1,function(x)quantile(x,0.975)) )
+                           lower=apply(pmat[-1,],1,function(x)stats::quantile(x,0.025)),
+                           upper=apply(pmat[-1,],1,function(x)stats::quantile(x,0.975)) )
       })
     })
 

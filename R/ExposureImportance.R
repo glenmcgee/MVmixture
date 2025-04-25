@@ -1,6 +1,5 @@
-require(randomForest)
-require(tidyverse)
-
+#' Compute Integrated Variances
+#' @keywords internal
 compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
 
   ## Create indices for group of interest and for remaining exposures
@@ -13,7 +12,7 @@ compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
 
   for (jj in 1 : length(groupJ)) {
     ## Need a model for the this exposure given the others
-    modJJ = randomForest(x = X[,groupNegJ], y = X[,groupJ[jj]])
+    modJJ = randomForest::randomForest(x = X[,groupNegJ], y = X[,groupJ[jj]])
 
     ## Extract predictions and residuals
     predJ[,jj] = modJJ$predicted
@@ -21,7 +20,7 @@ compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
   }
 
   ## Get conditional variance matrix
-  varJ = var(diffJ)
+  varJ = stats::var(diffJ)
   cholVarJ = chol(varJ)
 
   ## nSamp is typically going to be n unless n is very large
@@ -37,7 +36,7 @@ compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
   ## Sample nMC values from their conditional distribution (Normal approx)
   for (ni in 1 : nSamp) {
     newX[(ni-1)*nMC+1:nMC,groupJ] = t(matrix(rep(predJ[samp[ni],], nMC), ncol=nMC)) +
-      t(t(cholVarJ) %*% matrix(rnorm(nMC*length(groupJ)), ncol=nMC))
+      t(t(cholVarJ) %*% matrix(stats::rnorm(nMC*length(groupJ)), ncol=nMC))
   }
 
   ## Now make predictions on stacked newX
@@ -49,16 +48,28 @@ compute_integratedVariances <- function(obj,exps,X,n,p,K,nSamp,nMC){
     ## take mean across nMC
     dfpred <- data.frame(nsamp=rep(1:nSamp,each=nMC),
                          pred=pred$summary[[kk]]$mean)
-    predmean <- dfpred %>% group_by(nsamp) %>% summarize_all(mean)
+    predmean <- dfpred %>% dplyr::group_by(nsamp) %>% dplyr::summarize_all(mean)
 
     ## Final variance estimates across nSamp
-    integratedVariances[kk] <- var(predmean$pred)
+    integratedVariances[kk] <- stats::var(predmean$pred)
 
   }
 
   return(integratedVariances)
 }
 
+#' Construct MCMC sampler
+#'
+#' Internal function to construct the MCMC sampling function
+#'
+#' @param obj fitted model
+#' @param exposures which exposures to report
+#' @param nMC No. of MC samples
+#' @param nSamp No. of exposure samples
+#'
+#' @return function for MCMC update
+#'
+#' @export
 ExposureImportance = function(obj, exposures,
                               nMC = 250,
                               nSamp=NULL) {
@@ -79,7 +90,7 @@ ExposureImportance = function(obj, exposures,
 
   ## Variance estimates without integrating out X_j
   pred <- predict_MVmix(obj, newX = X, include_intercept=TRUE, allx=TRUE)
-  origVariances = sapply(1:K,function(kk){var(pred$summary[[kk]]$mean)})
+  origVariances = sapply(1:K,function(kk){stats::var(pred$summary[[kk]]$mean)})
 
   ## Final value of VIM
   VIMs = sapply(integratedVariances,function(x) 1 - x/origVariances)
