@@ -15,6 +15,7 @@ Imports:
     simdd,
     mgcv,
     MASS,
+    Matrix,
     reshape,
     randomForest,
     ggplot2,

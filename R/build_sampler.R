@@ -94,6 +94,33 @@ build_sampler <- function(const){
     }
   }
 
+  ## IF NONSEP==TRUE, don't update theta, and use different NONSEP-specific updates
+  if(const$NONSEP==TRUE){
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_thetastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_loglambda_theta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- NULL
+      }
+    }
+
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_lambda_beta", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- substitute(params <- update_lambda_NONSEP(params, const))
+      }
+    }
+
+    for(ll in 2:(length(body(update_params))-1)){
+      if(any(grepl( "update_betastar", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+        body(update_params)[[ll]] <- substitute(params <- update_betastar_NONSEP(params, const))
+      }
+    }
+  }
+
 
   ## replace rfb/approximation with MH
    if(const$approx==FALSE){
@@ -131,7 +158,6 @@ build_sampler <- function(const){
       }
     }
   }
-
 
 
   return(update_params)

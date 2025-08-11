@@ -33,7 +33,7 @@ compute_pi <- function(params,const){
 #' @keywords internal
 get_Btheta <- function(Xomega,const,params=NULL,k,j){
 
-    if(const$LM==TRUE){ ## if forcing linearity
+    if(const$LM==TRUE | const$NONSEP==TRUE){ ## if forcing linearity
       return(Xomega)
     }else{
       return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
@@ -59,9 +59,16 @@ get_DerivBtheta <- function(Xomega,const,params,k,j){
 #' @keywords internal
 get_B_beta_k <- function(params,const,kk){
 
-  return(sapply(1:const$p,function(jj){
-    get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
-  }))
+  if(const$NONSEP==FALSE){
+    return(sapply(1:const$p,function(jj){
+      get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    }))
+  }else{
+    return(sapply(1:const$p,function(jj){
+      get_Btheta(const$X[[jj]],const,params,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    }))
+  }
+
 
 }
 
@@ -89,7 +96,7 @@ get_DerivB_beta <- function(params,const,kk,jj){
 #' @keywords internal
 get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
 
-  if(const$LM==TRUE){ ## if forcing linear effects
+  if(const$LM==TRUE | const$NONSEP==TRUE){ ## if forcing linear effects
     return(Xomega)
   }else{
     return(mgcv::PredictMat(const$SS,data=data.frame(Xomega)))
@@ -101,9 +108,16 @@ get_Btheta_b <- function(Xomega,const,Ztheta=NULL,k,j){
 #' @keywords internal
 get_B_beta_k_b <- function(params,const,kk,Ztheta){
 
-  return(sapply(1:const$p,function(jj){
-    get_Btheta_b(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,Ztheta,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
-  }))
+  if(const$NONSEP==FALSE){
+    return(sapply(1:const$p,function(jj){
+      get_Btheta_b(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,Ztheta,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    }))
+  }else{
+    return(sapply(1:const$p,function(jj){
+      get_Btheta_b(const$X[[jj]],const,Ztheta,kk,jj)%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d)]
+    }))
+  }
+
 
 }
 
@@ -211,6 +225,7 @@ initialize_const <- function(Y, ## response
                              diff,
                              MIM,
                              MIMorder,
+                             NONSEP,
                              LM,
                              betaOrder,
                              ## MH tuning
@@ -255,6 +270,7 @@ initialize_const <- function(Y, ## response
                 diff=diff,
                 MIM=MIM,
                 MIMorder=MIMorder,
+                NONSEP=NONSEP,
                 LM=LM,
                 betaOrder=betaOrder,
                 ## MH tuning
@@ -274,6 +290,7 @@ initialize_const <- function(Y, ## response
     const$DLM <- FALSE ## mutually exclusive options
     const$DLMpenalty <- FALSE ## mutually exclusive options
     const$X <- rep(const$X,const$MIMorder)
+    const$NONSEP <- FALSE ## NONSEP only used for DLM
   }
 
 
@@ -309,6 +326,31 @@ initialize_const <- function(Y, ## response
     }
   }
 
+  ## NONSEP version of DLM only has beta
+  if(const$NONSEP==TRUE){
+    ## only cluster beta
+    if(const$clustering=="both"){
+      const$clustering <- "beta"
+    }else if(const$clustering=="theta"){
+      const$clustering <- "neither"
+    }
+
+    ## force DLM=TRUE for nonseparable version
+    const$DLM=TRUE
+    const$DLMpenalty=TRUE
+    const$LM=FALSE
+    # const$sharedlambda=TRUE
+
+    # force dim<=20
+    if(const$betaOrder*const$lagOrder>20){
+      print("Setting dim 5x4 for NONSEP version")
+      const$betaOrder <- 5
+      const$lagOrder <- 4
+    }
+
+
+  }
+
   ## cannot provide fixed IDs if clustering
   if(const$clustering=="both" | const$clustering=="beta"){
     const$fixedZbeta <- NULL
@@ -339,70 +381,145 @@ initialize_const <- function(Y, ## response
 
 
   ##
-  if(DLM==TRUE){ ## create penalty matrix
+  if(NONSEP==FALSE){ ## standard parameterization
+    if(DLM==TRUE){ ## create penalty matrix
 
-    if(!is.null(const$lagOrder)){
-      #########################################
-      ## B splines (with difference penalty) ##
-      QQ <- dlnm::ps(1:const$L,
-                     diff=const$diff, ##
-                     df=const$lagOrder, ##
-                     intercept=TRUE)
-      B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
-      qrB <- qr(B1)
-      Q <- qr.Q(qrB)
-      const$Psi <- Q
-      const$Lq <- ncol(const$Psi) ## =lagOrder
-      const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
-      # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
-      DDtemp <- diag(const$L)
-      for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
-      PEN <- MASS::ginv(t(Q) %*% MASS::ginv(t(DDtemp) %*% DDtemp) %*% Q)
-      const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
+      if(!is.null(const$lagOrder)){
+        #########################################
+        ## B splines (with difference penalty) ##
+        QQ <- dlnm::ps(1:const$L,
+                       diff=const$diff, ##
+                       df=const$lagOrder, ##
+                       intercept=TRUE)
+        B1 <- as.matrix(data.frame(QQ)) # basis matrix for smoothed l
+        qrB <- qr(B1)
+        Q <- qr.Q(qrB)
+        const$Psi <- Q
+        const$Lq <- ncol(const$Psi) ## =lagOrder
+        const$XPsi <- lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+        # DDtemp = getDtf(L, ord = 12) ## same as below without package dependency
+        DDtemp <- diag(const$L)
+        for(jj in 1:const$diff){DDtemp <- diff(DDtemp)}
+        PEN <- MASS::ginv(t(Q) %*% MASS::ginv(t(DDtemp) %*% DDtemp) %*% Q)
+        const$PEN = (PEN + t(PEN))/2 ## ensuring symmetry
 
-    }else{## if is.null(lagOrder) --> dont do basis expansion (no dimension reduction), but still do penalty
+      }else{## if is.null(lagOrder) --> dont do basis expansion (no dimension reduction), but still do penalty
 
-      const$Psi <- diag(const$L)
-      const$Lq <- const$L
-      const$XPsi <- const$X #lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
-      D <- diag(const$L)
-      for(jj in 1:const$diff){D <- diff(D)}
-      diffpen <- t(D)%*%D ## gives same as dlnm::ps(1:L,diff=diff,df=L,intercept=TRUE)
-      const$PEN <- diffpen
+        const$Psi <- diag(const$L)
+        const$Lq <- const$L
+        const$XPsi <- const$X #lapply(1:length(const$X),function(jj){ return(const$X[[jj]]%*%const$Psi) })
+        D <- diag(const$L)
+        for(jj in 1:const$diff){D <- diff(D)}
+        diffpen <- t(D)%*%D ## gives same as dlnm::ps(1:L,diff=diff,df=L,intercept=TRUE)
+        const$PEN <- diffpen
 
+      }
+
+
+
+    }else{ ## no penalties
+      const$PEN <- matrix(0,ncol=const$L,nrow=const$L)
+      const$Lq <- const$L ##
+      const$Psi <- diag( const$L) ## basis matrix
+      const$XPsi <- const$X #
     }
 
 
+    ## basis functions
+    ### Uses same basis functions for all exposures.
+    if(const$LM==TRUE){
+      const$sharedlambda <- TRUE ## single ridge penalty
+      const$SS <- NULL
+      const$SSderiv <- NULL ## make a smooth object for computing first order derivatives
+      const$d <- 1
+      const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
+      const$invSig0 <- as.matrix(1)
+    }else{
+      tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
+      ## combining all exposures to get basis functions
+      Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
+      const$SS <- mgcv::smoothCon(mgcv::s(Xomega,bs="bs",k=betaOrder),data=data.frame(Xomega),
+                                  absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
+      const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
+      const$SSderiv$deriv <- 1 ## first order derivatives
+      const$d <- ncol(const$SS$X)
+      const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
+      const$invSig0 <- const$SS$S[[1]]
+    }
 
-  }else{ ## no penalties
-    const$PEN <- matrix(0,ncol=const$L,nrow=const$L)
-    const$Lq <- const$L ##
-    const$Psi <- diag( const$L) ## basis matrix
-    const$XPsi <- const$X #
+  }else if (const$NONSEP==TRUE & const$DLM==TRUE){
+    ## non-separable parametrization requires tensor product basis
+
+    # ## DLNM version --didn't apply same constraints. new version below
+    # Xlong <- Reduce("rbind",const$X) ## stack all exposure matrices to get single basis representation.
+    # cb.obj <- dlnm::crossbasis(x=Xlong, lag=c(1,const$L),
+    #                      argvar=list(fun="ps",df=const$betaOrder,degree=2,intercept=FALSE),
+    #                      arglag=list(fun="ps",df=const$lagOrder,degree=2,intercept=TRUE))
+    #
+    # ## penalty matrices
+    # penMatlist <- dlnm::cbPen(cb.obj)
+    # const$invSig0 <- penMatlist$Svar ## penalty matrix for X
+    # const$PEN <- penMatlist$Slag ## penalty matrix for L
+    #
+    # ## define B matrices a priori since they wont change (not a fuction of theta)
+    # const$X <- lapply(1:const$p,function(pp){cb.obj[(pp-1)*const$n+(1:const$n),]})
+    #
+    # ## dimension
+    # const$d <- ncol(cb.obj) ## both now combined into single nonseparable beta
+    # const$Lq <- 1
+    #
+    # ## unused components carried over from X basis
+    # const$SS <- cb.obj ## now a cross-basis object
+    # const$SSderiv <- NULL
+    # const$mu0 <- rep(0,const$d)
+
+    # Xlong <- Reduce("rbind",const$X) ## stack all exposure matrices to get single basis representation.
+    # lag <- matrix(1:const$L,byrow=TRUE,ncol=ncol(Xlong),nrow=nrow(Xlong)) ## matrix of lag times to construct tensor
+    #
+    # const$SS <- mgcv::smoothCon(mgcv::te(x,lag,bs="ps",k=c(const$betaOrder,const$lagOrder)),data=list(x=Xlong,lag=lag),n=nrow(Xlong),absorb.cons=TRUE)[[1]]
+    # const$invSig0 <- const$SS$S[[1]]
+    # const$PEN <- const$SS$S[[2]]
+    #
+    # ## define B matrices a priori since they wont change (not a fuction of theta)
+    # const$X <- lapply(1:const$p,function(pp){const$SS$X[(pp-1)*const$n+(1:const$n),]})
+    # const$lagmat <- lag ## for PredictMat ## EDIT. might be long?
+
+    Xlong <- Reduce("rbind",const$X) ## stack all exposure matrices to get single basis representation.
+    laglong <- matrix(1:const$L,byrow=TRUE,ncol=ncol(Xlong),nrow=nrow(Xlong)) ## matrix of lag times to construct tensor
+    lag <- matrix(1:const$L,byrow=TRUE,ncol=ncol(Xlong),nrow=nrow(const$X[[1]]))
+
+    const$SS <- mgcv::gam(rep(Y[,1],length(const$X))~s(x,bs="ps",k=const$betaOrder)+
+                            ti(x,lag,bs="ps",k=c(const$betaOrder,const$lagOrder)),
+                                data=list(x=Xlong,lag=laglong),
+                         sp=rep(1,3*length(const$X)))# just using this for basis #,fit=TRUE
+
+    # predict(obj$const$SS,data=list(x=Xlong,lag=laglong),type="lpmatrix"))[,-1]
+
+    const$invSig0 <- as.matrix(Matrix::bdiag(const$SS$smooth[[1]]$S[[1]],
+                                             const$SS$smooth[[2]]$S[[1]]))
+    const$PEN <- as.matrix(Matrix::bdiag(matrix(0,nrow=nrow(const$SS$smooth[[1]]$S[[1]]),ncol=ncol(const$SS$smooth[[1]]$S[[1]])),
+                               const$SS$smooth[[2]]$S[[2]]))
+
+    ## define B matrices a priori since they wont change (not a fuction of theta)
+    SS_X <- model.matrix(const$SS)[,-1]
+    const$X <- lapply(1:const$p,function(pp){SS_X[(pp-1)*const$n+(1:const$n),]})
+    const$lagmat <- lag ## for PredictMat ## EDIT.
+
+    ## dimension
+    const$d <- ncol(SS_X) ## both now combined into single nonseparable beta
+    const$Lq <- 1
+
+    ## unused components carried over from X basis
+    const$SSderiv <- NULL
+    const$mu0 <- rep(0,const$d)
+
+    ## unused components carried over from L basis
+    const$Psi <- NULL
+    const$XPsi <- NULL
+
   }
 
 
-  ## basis functions
-  ### Uses same basis functions for all exposures.
-  if(const$LM==TRUE){
-    const$sharedlambda <- TRUE ## single ridge penalty
-    const$SS <- NULL
-    const$SSderiv <- NULL ## make a smooth object for computing first order derivatives
-    const$d <- 1
-    const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
-    const$invSig0 <- as.matrix(1)
-  }else{
-    tempomega <- rep(1,const$L)/sqrt(const$L) ## just a standard theta value in order to compute basis functions
-    ## combining all exposures to get basis functions
-    Xomega <- c(sapply(1:const$p,function(jj){const$X[[jj]]%*%tempomega}))
-    const$SS <- mgcv::smoothCon(mgcv::s(Xomega,bs="bs",k=betaOrder),data=data.frame(Xomega),
-                                absorb.cons = TRUE)[[1]] ## should be true for multiple exposures
-    const$SSderiv <- const$SS ## make a smooth object for computing first order derivatives
-    const$SSderiv$deriv <- 1 ## first order derivatives
-    const$d <- ncol(const$SS$X)
-    const$mu0 <- rep(0,const$d) ## probably no need to change this from 0
-    const$invSig0 <- const$SS$S[[1]]
-  }
 
   ## grid for
   const$grid <- (1:(const$gridsize-1))/const$gridsize ## exclude 0s and 1s
@@ -468,7 +585,6 @@ get_starting_vals <- function(const){
     params$lambda_beta <- 5
   }
 
-
   if(const$DLM==TRUE & const$DLMpenalty==TRUE){
     params$loglambda_theta <- log(stats::rgamma(1,shape=const$prior_lambda_theta[1],rate=const$prior_lambda_theta[2]))
   }else{
@@ -487,7 +603,8 @@ get_starting_vals <- function(const){
     params$u <- rep(0,const$n)
   }
 
-  if(const$L==1){ ## dont need theta if L==1
+
+  if(const$L==1 | const$Lq==1){ ## dont need theta if L==1
     params$phistar <- NULL
     params$omegastar <- params$thetastar <- rep(1,const$Ctheta)
 
@@ -533,8 +650,6 @@ get_starting_vals <- function(const){
     params$b0 <- c(LS[,1])
     params$betaZk <- LS[,-1,drop=F]
   }
-
-
 
   params$err <- 0
   return(params)

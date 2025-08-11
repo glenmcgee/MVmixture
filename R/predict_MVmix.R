@@ -25,7 +25,7 @@ summarize_pred <- function(pred,contrast){
 summarize_pred_all <- function(pred,obj,include_intercept,newZ){
   summlist <- lapply(1:length(pred),function(kk){
     pmat <- Reduce("+",pred[[kk]])+
-      as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(newZ))+
+      as.numeric(include_intercept)*matrix(obj$b0[,kk],ncol=length(obj$b0[,kk]),nrow=nrow(newZ),byrow=TRUE)+ ##BUG FIX: byrow=TRUE
       newZ%*%t(obj$betaZk[,(kk-1)*obj$const$pz+(1:obj$const$pz)])
     return(data.frame(mean=apply(pmat,1,mean),
                       lower=apply(pmat,1,function(x)stats::quantile(x,0.025)),
@@ -78,7 +78,42 @@ predict_MVmix <- function(obj,
   }
 
   RR <- nrow(as.matrix(obj$sigma2))
-  if(fixomega==FALSE){ ## sample theta
+  if(obj$const$NONSEP==TRUE){
+
+    # ## DLNM version --didn't apply same constraints. new version below
+    # ## section edited from dlnm package (https://cran.r-project.org/web/packages/dlnm/index.html)
+    # newX <- lapply(newX,function(XX){
+    #   basisvar <- do.call(eval(parse(text="dlnm::onebasis")),c(list(x=XX),attr(obj$const$SS,"argvar")))
+    #   basislag <- do.call(eval(parse(text="dlnm::onebasis")),c(list(x=1:obj$const$L),attr(obj$const$SS,"arglag")))
+    #
+    #   crossbasis <- matrix(0, nrow=nrow(XX), ncol=ncol(basisvar)*ncol(basislag))
+    #   for(vv in (1:ncol(basisvar))){
+    #     mat <- matrix(basisvar[,vv], ncol=obj$const$L)
+    #     for(ll in (1:ncol(basislag))){
+    #       crossbasis[,ncol(basislag)*(vv-1)+ll] <- mat%*%basislag[,ll]
+    #     }
+    #   }
+    #   return(crossbasis)
+    # })
+
+    # newX <- lapply(newX,function(XX){
+    #   mgcv::PredictMat(obj$const$SS,data=list(x=XX,lag=obj$const$lagmat),n=nrow(XX))
+    # })
+
+    newX <- lapply(newX,function(XX){
+      mgcv::predict.gam(obj$const$SS,newdata=list(x=XX,lag=obj$const$lagmat),type="lpmatrix")[,-1]
+    })
+
+    pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
+      lapply(1:obj$const$p,function(jj){ ## loop over exposures
+        sapply(1:RR,function(rr){## loop over samples
+          I_b0*(obj$b0[rr,kk])+newX[[jj]]%*%(obj$beta[[jj]][[kk]][rr,])
+        })
+      })
+    })
+
+
+  }else if(fixomega==FALSE){ ## sample theta
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures
@@ -170,7 +205,43 @@ est_lag <- function(obj,
 
 
   RR <- nrow(as.matrix(obj$sigma2))
-  if(fixomega==FALSE){ ## sample theta
+  if(obj$const$NONSEP==TRUE){
+
+    # ## DLNM version --didn't apply same constraints. new version below
+    # ## section edited from dlnm package (https://cran.r-project.org/web/packages/dlnm/index.html)
+    # newX <- lapply(newX,function(XX){
+    #   basisvar <- do.call(eval(parse(text="dlnm::onebasis")),c(list(x=XX),attr(obj$const$SS,"argvar")))
+    #   basislag <- do.call(eval(parse(text="dlnm::onebasis")),c(list(x=1:obj$const$L),attr(obj$const$SS,"arglag")))
+    #
+    #   crossbasis <- matrix(0, nrow=nrow(XX), ncol=ncol(basisvar)*ncol(basislag))
+    #   for(vv in (1:ncol(basisvar))){
+    #     mat <- matrix(basisvar[,vv], ncol=obj$const$L)
+    #     for(ll in (1:ncol(basislag))){
+    #       crossbasis[,ncol(basislag)*(vv-1)+ll] <- mat%*%basislag[,ll]
+    #     }
+    #   }
+    #   return(crossbasis)
+    # })
+
+    # newX <- lapply(newX,function(XX){
+    #   mgcv::PredictMat(obj$const$SS,data=list(x=XX,lag=obj$const$lagmat),n=nrow(XX))
+    # })
+
+    newX <- lapply(newX,function(XX){
+      mgcv::predict.gam(obj$const$SS,newdata=list(x=XX,lag=obj$const$lagmat),type="lpmatrix")[,-1]
+    })
+
+    pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
+      lapply(1:obj$const$p,function(jj){ ## loop over exposures
+        sapply(1:RR,function(rr){## loop over samples
+          I_b0*(obj$b0[rr,kk])+newX[[jj]]%*%(obj$beta[[jj]][[kk]][rr,])
+        })
+      })
+    })
+
+
+
+  }else if(fixomega==FALSE){ ## sample theta
 
     pred <- lapply(1:obj$const$K,function(kk){ ## loop over outcomes
       lapply(1:obj$const$p,function(jj){ ## loop over exposures

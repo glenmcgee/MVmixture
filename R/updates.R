@@ -17,7 +17,11 @@ update_clustMemb <- function(params,const){
         ## necessary components
         B_beta <- get_B_beta_k(params,const,kk)
         y_B_u <- const$y[const$k_index==kk]-params$b0[kk]-(apply(B_beta[,-jj,drop=F],1,sum) +params$xi*sqrt(params$sigma2[kk])*params$u+const$Zcovariates%*%params$betaZk[kk,])
-        Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
+        if(const$NONSEP==FALSE){ ## allow clustering beta in non-separable parameterization
+          Bth_kj <- get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[kk,jj]-1)*const$L+(1:const$L)],const,params,kk,jj)
+        }else{
+          Bth_kj <- get_Btheta(const$X[[jj]],const,params,kk,jj)
+        }
 
         ## compute probabilities for all possible a
         logprobs <- c(sapply(1:const$Cbeta, function(a){  ## loop over a (rows; beta clusters)
@@ -291,6 +295,90 @@ update_betastar <- function(params,const){
 }
 
 
+#' Update betastar for NONSEP parameterization
+#' @keywords internal
+update_betastar_NONSEP <- function(params,const){
+
+  ## computing only once
+  Btheta <- lapply(1:const$p,function(jj){
+    Reduce("rbind",lapply(1:const$K,function(kk){
+      get_Btheta(const$X[[jj]],const,params,kk,jj)
+    }))
+  })
+
+
+  for(cc in 1:const$Cbeta){
+    n_c <- sum(params$Zbeta==cc)
+
+
+    if(n_c>0){
+      if(const$sharedlambda==TRUE){
+        lambda_beta <- params$lambda_beta
+      }else{
+        lambda_beta <- params$lambda_beta[cc]
+      }
+
+      whichZ <- which(params$Zbeta==cc,arr.ind=TRUE)
+      whichk <- sort(unique(whichZ[,1]))
+      whichkj <- lapply(1:const$K,function(kk){sort(whichZ[whichZ[,1]==kk,2])})
+      whichkNotj <- lapply(1:const$K,function(kk){which(!(1:const$p)%in%whichkj[[kk]])  })
+
+      ## Btheta for relevant k,j pairs
+      B_kc <- lapply(whichk,function(kk){
+        Reduce("+",lapply(whichkj[[kk]],function(jj){
+          Btheta[[jj]][const$k_index==kk,]/sqrt(params$sigma2[kk]) ## sqrt since it gets squared in BTB
+        }))
+      })
+
+      ## sum of B^TB across relevant k
+      BTB <- Reduce("+",lapply(B_kc,function(BB){t(BB)%*%BB}))
+
+      ##
+      y_u_B_k <- lapply(whichk,function(kk){
+        y_u <- const$y[const$k_index==kk]-params$b0[kk]-params$xi*sqrt(params$sigma2[kk])*params$u-const$Zcovariates%*%params$betaZk[kk,]
+        if(length(whichkNotj[[kk]])>0){
+          y_u <- y_u - Reduce("+",lapply(whichkNotj[[kk]],function(jj){
+            Btheta[[jj]][const$k_index==kk,,drop=F]%*%params$betastar[(params$Zbeta[kk,jj]-1)*const$d+(1:const$d),drop=F]
+          }))
+        }
+        return(y_u/sqrt(params$sigma2[kk])) ## sqrt because it multiples B
+      })
+
+      ##
+      yTB <- Reduce("+",lapply(1:length(whichk),function(kk){
+        t(y_u_B_k[[kk]])%*%B_kc[[kk]]
+      }))
+
+      ## compute Vmat only once ## summing over all k in cluster cc
+      Pmat <- lambda_beta*(const$invSig0+const$PEN)
+      Vmat <- MASS::ginv(Pmat+BTB)
+      Vmat <- (Vmat+t(Vmat))/2
+
+      params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
+                                                                      mean=Vmat%*%t(t(const$mu0)%*%Pmat+yTB  ),
+                                                                      sigma=Vmat)
+
+
+    }else{ ## if n_c=0, draw from the prior
+      if(const$sharedlambda==TRUE){
+        lambda_beta <- params$lambda_beta
+      }else{
+        lambda_beta <- params$lambda_beta[cc]
+      }
+      Pmat <- lambda_beta*(const$invSig0+const$PEN)
+      params$betastar[(cc-1)*const$d+(1:const$d)] <- mvtnorm::rmvnorm(n=1,
+                                                                      mean=const$mu0,
+                                                                      sigma=MASS::ginv(Pmat) )
+
+    }
+
+  }
+
+  return(params)
+}
+
+
+
 #' Update thetastar via approx method
 #' @keywords internal
 update_thetastar <- function(params,const){
@@ -486,6 +574,7 @@ update_lambda_beta <- function(params,const){
   return(params)
 }
 
+
 #' Update smoothness penalty on theta
 #' @keywords internal
 update_loglambda_theta <- function(params,const){
@@ -517,6 +606,40 @@ update_loglambda_theta <- function(params,const){
 
   return(params)
 }
+
+
+#' Update both smoothness penalties for NONSEP parameterization
+#' @keywords internal
+update_lambda_NONSEP <- function(params,const){
+
+  Pmat <- const$invSig0+const$PEN ## elsewhere this includes the penalty params (for later use possibly); ## here contains only constant penalty matrix
+
+
+
+  if(const$sharedlambda==TRUE){
+    gamrate <- const$prior_lambda_beta[2]+0.5*sum(sapply(1:const$Cbeta, ## summing over all clusters cc
+                                                         function(cc){c(t(params$betastar[(cc-1)*const$d+(1:const$d)])%*%Pmat%*%params$betastar[(cc-1)*const$d+(1:const$d)])}))
+    if(is.finite(gamrate)){
+      params$lambda_beta <- stats::rgamma(1,
+                                          shape=const$prior_lambda_beta[1]+0.5*const$Cbeta*Matrix::rankMatrix(Pmat),
+                                          rate=gamrate)
+
+    }
+  }else{
+    for(cc in 1:const$Cbeta){
+
+      params$lambda_beta[cc] <- stats::rgamma(1,
+                                              shape=const$prior_lambda_beta[1]+0.5*Matrix::rankMatrix(Pmat),
+                                              rate=const$prior_lambda_beta[2]+0.5*c(t(params$betastar[(cc-1)*const$d+(1:const$d)])%*%Pmat%*%params$betastar[(cc-1)*const$d+(1:const$d)]))
+    }
+
+  }
+
+
+
+  return(params)
+}
+
 
 
 #' Update u (ranef)

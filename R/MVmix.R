@@ -6,6 +6,7 @@
 # require(simdd)
 # require(mgcv)
 # require(MASS)
+# require(Matrix)
 # require(reshape)
 # require(randomForest)
 # require(tidyverse)
@@ -52,6 +53,7 @@
 #' @param diff  Degree of difference penalty matrix (if DLMpenalty=TRUE)
 #' @param MIM Fit MIM version with unknown index structure (T/F)
 #' @param MIMorder Maximum order of MIM (i.e. number of indices); ignored if MIM=FALSE
+#' @param NONSEP Use "non-separable" DLM parameterization to allow f to change over time.
 #' @param LM Force linear exposure response relationships (T/F)
 #' @param betaOrder B-spline basis dimension for exposure response functions. default -1 allows mgcv to choose automatically
 #' @param stepsize_logrho SD for random walk updates on log(rho)
@@ -97,6 +99,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                   diff=2, ## degree of difference penalty matrix (if DLM=TRUE)
                   MIM=FALSE, ## fit MIM version
                   MIMorder=4, ## maximum order of MIM (ignored if MIM=FALSE)
+                  NONSEP=FALSE, ## use "non-separable" DLM parameterization allowing f to change over time
                   LM=FALSE, ## force linear effects
                   betaOrder=-1, ## b spline basis dimension for exposure response functions. default -1 allows mgcv to choose automatically
                   ## MH tuning
@@ -148,6 +151,7 @@ MVmix <- function(Y, ## n x K matrix of responses
                               diff,
                               MIM,
                               MIMorder,
+                              NONSEP,
                               LM,
                               betaOrder,
                               ## MH tuning
@@ -188,7 +192,7 @@ MVmix <- function(Y, ## n x K matrix of responses
     keep_alpha <- matrix(0,ncol=2,nrow=nkeep)
     keep_logrho <- matrix(0,ncol=1,nrow=nkeep)
     keep_lambda_beta <- matrix(0,ncol=const$Cbeta,nrow=nkeep)
-    keep_loglambda_theta <- matrix(0,ncol=1,nrow=nkeep)
+    keep_loglambda_theta <- matrix(0,ncol=length(params_ss$loglambda_theta),nrow=nkeep)
     keep_u <- matrix(0,ncol=const$n,nrow=nkeep)
     keep_xi <- matrix(0,ncol=1,nrow=nkeep)
     keep_sigma2 <- matrix(0,ncol=const$K,nrow=nkeep)
@@ -327,6 +331,9 @@ MVmix <- function(Y, ## n x K matrix of responses
 
   ## track errors
   samples$maxerr <- paste0(round(100*maxerr/niter),"%")
+
+  ## reset X if using NONSEP version
+  samples$const$X <- X
 
   return(samples)
 }
