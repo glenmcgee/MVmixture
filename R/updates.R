@@ -651,11 +651,59 @@ update_u <- function(params,const){
 
   for(ii in 1:const$n){## loop over all subjects
     params$u[ii] <- stats::rnorm(1,
-                          mean=(1/(1+sum((params$xi^2))))*sum((params$xi*sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii]-t(const$Zcovariates[ii,]%*%t(params$betaZk)))),
-                          sd=sqrt(1/(1+sum((params$xi^2))))  )
+                          mean=(1/(1+(const$K*(params$xi^2))))*sum((params$xi/sqrt(params$sigma2))*(const$y[const$i_index==ii]-params$b0-sumB_beta[const$i_index==ii]-t(const$Zcovariates[ii,]%*%t(params$betaZk)))), ## DEBUG: previously had xi*sigma, not xi/sigma
+                          sd=sqrt(1/(1+(const$K*(params$xi^2))))  ) ## DEBUG:  previously had sum(params$xi^2) instead of K*params$xi^2
   }
+
+  ## if forcing orthogonality
+  if(const$condkrig==TRUE){
+
+    ## first construct Btheta1 (design mat from first outcome)
+    if(const$NONSEP==FALSE & const$LM==FALSE){
+      if(const$fixorthog==TRUE){ ## constant theta for orthogonalization
+        fixtheta <- c(rep(1,const$L)/sqrt(const$L))
+        B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+          get_Btheta(const$X[[jj]]%*%fixtheta,const,params,1,jj)
+        }))
+      }else{
+        B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+          get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[1,jj]-1)*const$L+(1:const$L)],const,params,1,jj)
+        }))
+      }
+    }else{ ## nonseparable version is exact (no theta)
+      B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+        get_Btheta(const$X[[jj]],const,params,1,jj)
+      }))
+    }
+
+    params$u <- (diag(const$n)-B1%*%ginv(t(B1)%*%B1)%*%t(B1))%*%params$u ### CONDITIONING BY KRIGING
+  }
+
   return(params)
 }
+
+#' #' Update u (ranef) when fixorthog=TRUE (joint update)
+#' #' @keywords internal
+#' update_u_fixorthog <- function(params,const){
+#'
+#'   ## mean vector (except for the SigmaU which needs to be premultiplied)
+#'   mu <- Reduce("+",lapply(1:const$K,function(kk){
+#'     return((params$xi/sqrt(params$sigma2[kk]))*(const$y[const$k_index==kk]-params$b0[kk]-apply(get_B_beta_k(params,const,kk),1,sum)-const$Zcovariates%*%params$betaZk[kk,]))
+#'   }))
+#'
+#'   ## variance of U from woodbury formula, with orthogonalized/RSR parameterization
+#'   SigmaU <- (1/(const$K*params$xi^2))*diag(const$n)+(1/(const$K*params$xi^2))*(1/(const$K*params$xi^2))*const$fixPmat
+#'
+#'   ## draw u
+#'   params$u <- c(mvtnorm::rmvnorm(n=1,
+#'                                  mean=SigmaU%*%mu,
+#'                                  sigma=SigmaU))
+#'
+#'
+#'   return(params)
+#' }
+
+
 
 #' Update xi
 #' @keywords internal

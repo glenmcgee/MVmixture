@@ -236,7 +236,9 @@ initialize_const <- function(Y, ## response
                              Vgridsearch,
                              gridsize,
                              rfbtries,
-                             approx){
+                             approx,
+                             condkrig,
+                             fixorthog){
 
 
   const <- list(y=c(Y), ## convert nxK matrix to a single vector of outcomes,
@@ -281,7 +283,9 @@ initialize_const <- function(Y, ## response
                 Vgridsearch=Vgridsearch,
                 gridsize=gridsize,
                 rfbtries=rfbtries,
-                approx=approx)
+                approx=approx,
+                condkrig=condkrig,
+                fixorthog=fixorthog)
 
   if(is.list(X)==FALSE){
     const$X <- list(X)
@@ -378,6 +382,7 @@ initialize_const <- function(Y, ## response
     }
     const$Ctheta <- max(const$fixedZtheta)
   }
+
 
 
   ##
@@ -529,6 +534,32 @@ initialize_const <- function(Y, ## response
     const$prior_tau_theta <- 0 ## force to be 0 for polar sampling, otherwise normalizing constant wont work
   }
 
+
+  if(const$fixorthog==TRUE){
+    const$condkrig <- TRUE
+  }
+  # ## only one orthogonalization strategy allowed
+  # if(const$condkrig==TRUE){
+  #   const$fixorthog=FALSE
+  # }
+  # ## Define fixed P (based on theta=1) to be used repeatedly
+  # if(const$fixorthog==TRUE){
+  #
+  #   if(const$NONSEP==FALSE){ ##based on theta=1
+  #     B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+  #       fixtheta <- c(rep(1,const$L)/sqrt(const$L))
+  #       get_Btheta(const$X[[jj]]%*%fixtheta,const,params,1,jj)
+  #     }))
+  #   }else{ ## exact, since no theta here
+  #     B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+  #       get_Btheta(const$X[[jj]],const,params,1,jj)
+  #     }))
+  #   }
+  #
+  #   const$fixPmat <- B1%*%ginv(t(B1)%*%B1)%*%t(B1)
+  # }
+
+
   return(const)
 }
 
@@ -591,17 +622,6 @@ get_starting_vals <- function(const){
     params$loglambda_theta <- -Inf
   }
 
-  params$sigma2 <- 1/stats::rgamma(const$K,shape=5,rate=1)
-
-  #
-  if(const$K>1){
-    params$xi <- 1/stats::rgamma(1,shape=10,rate=1)
-    params$u <- stats::rnorm(const$n,0,1)
-
-  }else{
-    params$xi <- 0
-    params$u <- rep(0,const$n)
-  }
 
 
   if(const$L==1 | const$Lq==1){ ## dont need theta if L==1
@@ -649,6 +669,35 @@ get_starting_vals <- function(const){
     LS <- t(solve(t(ZZ)%*%ZZ)%*%t(ZZ)%*%matrix(const$y,ncol=const$K))
     params$b0 <- c(LS[,1])
     params$betaZk <- LS[,-1,drop=F]
+  }
+
+  params$sigma2 <- 1/stats::rgamma(const$K,shape=5,rate=1)
+
+  # random effects
+  if(const$K>1){
+    params$xi <- 1/stats::rgamma(1,shape=10,rate=1)
+    params$u <- stats::rnorm(const$n,0,1)
+
+    ## if forcing orthogonality
+    if(const$condkrig==TRUE){
+
+      ## first construct Btheta1 (design mat from first outcome)
+      if(const$NONSEP==FALSE & const$LM==FALSE){
+        B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+          get_Btheta(const$X[[jj]]%*%params$omegastar[(params$Ztheta[1,jj]-1)*const$L+(1:const$L)],const,params,1,jj)
+        }))
+      }else{ ## nonseparable version is exact (no theta)
+        B1 <- Reduce("cbind",lapply(1:const$p,function(jj){
+          get_Btheta(const$X[[jj]],const,params,1,jj)
+        }))
+      }
+
+      params$u <- (diag(const$n)-B1%*%ginv(t(B1)%*%B1)%*%t(B1))%*%params$u ### CONDITIONING BY KRIGING
+    }
+
+  }else{
+    params$xi <- 0
+    params$u <- rep(0,const$n)
   }
 
   params$err <- 0

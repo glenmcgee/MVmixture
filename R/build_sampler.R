@@ -160,5 +160,15 @@ build_sampler <- function(const){
   }
 
 
+  # ## replace usual indep u updates with fixorthog version
+  # if(const$fixorthog==TRUE){
+  #   for(ll in 2:(length(body(update_params))-1)){
+  #     if(any(grepl( "update_u", as.character(body(update_params)[[ll]]), fixed = TRUE))){
+  #       body(update_params)[[ll]] <- substitute(params <- update_u_fixorthog(params, const))
+  #     }
+  #   }
+  # }
+
+
   return(update_params)
 }

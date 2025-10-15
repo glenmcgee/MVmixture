@@ -65,6 +65,7 @@
 #' @param rfbtries Max number of tries for drawing from Fisher-Bingham; equiv.to "mtop" for rFisherBingham (default 1000)
 #' @param approx Should rFB approximation be used? Otherwise use polar transformation and MH updates
 #' @param appendchain Option to use last values of a previous fit as starting values for a new chain.
+#' @param condkrig Option to apply approximate conditioning by kriging for orthogonalizing random effects
 #'
 #' @return Posterior samples for all parameters.
 #'
@@ -111,7 +112,9 @@ MVmix <- function(Y, ## n x K matrix of responses
                   gridsize=10, ## size of grid. Not used it Vgridsearch==FALSE
                   rfbtries=1000, ## mtop for rFisherBingham (default 1000)
                   approx=TRUE,  ## TRUE=MVN/rFB sampling. FALSE=MH_Beta sampling
-                  appendchain=NULL){ ## set to previous_fit to keep running chain
+                  appendchain=NULL,## set to previous_fit to keep running chain
+                  condkrig=FALSE,## TRUE=conditioning by kriging w.r.t. first B_theta (overrides fixorthog=TRUE)
+                  fixorthog=FALSE){ ##TRUE=restricted regression, using fixed orthogonalization (precluded by condkrig=TRUE)
 
   ## set up constants
   if(!is.null(appendchain)){
@@ -162,7 +165,9 @@ MVmix <- function(Y, ## n x K matrix of responses
                               Vgridsearch,
                               gridsize,
                               rfbtries,
-                              approx)
+                              approx,
+                              condkrig,
+                              fixorthog)
   }
 
 
